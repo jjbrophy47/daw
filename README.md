@@ -27,7 +27,7 @@ import numpy as np
 
 # training data
 X_train = np.array([[0, 1], [0, 1], [0, 1], [1, 0], [1, 0]])
-y_train = np.array([1, 1, 1, 0, 1])
+y_train = np.array([0.5, 0.7, 0.2, 1.1, 0.25])
 
 X_test = np.array([[1, 0]])  # test instance
 
