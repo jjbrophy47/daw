@@ -30,7 +30,8 @@ cdef inline void sort(DTYPE_t* Xf, SIZE_t* samples, SIZE_t n) nogil:
 cdef inline void swap(DTYPE_t* Xf, SIZE_t* samples, SIZE_t i, SIZE_t j) nogil:
     # Helper for sort
     Xf[i], Xf[j] = Xf[j], Xf[i]
-    samples[i], samples[j] = samples[j], samples[i]
+    if samples is not NULL:
+        samples[i], samples[j] = samples[j], samples[i]
 
 cdef inline DTYPE_t median3(DTYPE_t* Xf, SIZE_t n) nogil:
     # Median of three pivot selection, after Bentley and McIlroy (1993).
@@ -82,7 +83,8 @@ cdef void introsort(DTYPE_t* Xf, SIZE_t *samples,
 
         introsort(Xf, samples, l, maxd)
         Xf += r
-        samples += r
+        if samples is not NULL:
+            samples += r
         n -= r
 
 cdef inline void sift_down(DTYPE_t* Xf, SIZE_t* samples,

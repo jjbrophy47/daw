@@ -20,7 +20,7 @@ from ._tree import _TreeBuilder
 MAX_DEPTH_LIMIT = 1000
 MAX_INT = 2147483647
 
-CRITERION_ENUM {
+CRITERION_ENUM = {
     'absolute_error': 0,
     'squared_error': 1
 }
@@ -114,6 +114,9 @@ class RandomForestRegressor(object):
         # set top d
         self.topd_ = min(self.topd, self.max_depth_ + 1)
 
+        # check criterion is valid
+        assert self.criterion in ['absolute_error', 'squared_error']
+
         # make sure k is positive
         assert self.k > 0
 
@@ -126,14 +129,14 @@ class RandomForestRegressor(object):
             # print('\n\nTree {:,}'.format(i))
 
             # build tree
-            tree = Tree(topd=self.topd_,
-                        k=self.k,
-                        max_depth=self.max_depth_,
-                        criterion=self.criterion,
-                        min_samples_split=self.min_samples_split,
-                        min_samples_leaf=self.min_samples_leaf,
-                        random_state=self.random_state_ + i,
-                        verbose=self.verbose)
+            tree = DecisionTreeRegressor(topd=self.topd_,
+                                         k=self.k,
+                                         max_depth=self.max_depth_,
+                                         criterion=self.criterion,
+                                         min_samples_split=self.min_samples_split,
+                                         min_samples_leaf=self.min_samples_leaf,
+                                         random_state=self.random_state_ + i,
+                                         verbose=self.verbose)
 
             tree = tree.fit(X, y, max_features=self.max_features_, manager=self.manager_)
 
@@ -145,9 +148,9 @@ class RandomForestRegressor(object):
 
         return self
 
-    def predict(self, X, median=False):
+    def predict(self, X):
         """
-        Mean or median of outputs.
+        Mean or median of outputs, depending on the split criterion.
 
         Predict mean regression value for each tree,
         then take the mean of all tree outputs.
@@ -161,15 +164,17 @@ class RandomForestRegressor(object):
         check_data(X)
 
         # sum all predictions instead of storing them
-        preds = np.zeros((X.shape[0], len(self.trees)))  # shape=(len(X), n_tree)
+        preds = np.zeros((X.shape[0], len(self.trees_)))  # shape=(len(X), n_tree)
         for i, tree in enumerate(self.trees_):
             preds[:, i] = tree.predict(X)  # shape=(len(X),)
 
         # aggregate
-        if median:
+        if self.criterion == 'absolute_error':
             preds = np.median(preds, axis=1)  # shape=(len(X),)
-        else:  # mean
+        elif self.criterion == 'squared_error':
             preds = np.mean(preds, axis=1)  # shape=(len(X),)
+        else:
+            raise ValueError(f'Unknown criterion {self.criterion}')
 
         return preds
 
@@ -193,28 +198,28 @@ class RandomForestRegressor(object):
 
         return leaves
 
-    def slack(self, X):
-        """
-        Predict root-to-leaf slack, that is, the minimum number of examples
-        that cause retraining when ADDED to a given decision node.
+    # def slack(self, X):
+    #     """
+    #     Predict root-to-leaf slack, that is, the minimum number of examples
+    #     that cause retraining when ADDED to a given decision node.
 
-        Input
-            X: np.ndarray, 2d array of input data.
+    #     Input
+    #         X: np.ndarray, 2d array of input data.
 
-        Return
-            dict
-                key: tree_idx,
-                value: 2d array of root-to-leaf slack; shape=(len(X), total no. nodes in tree).
-        """
-        assert X.ndim == 2
-        X = check_data(X)
+    #     Return
+    #         dict
+    #             key: tree_idx,
+    #             value: 2d array of root-to-leaf slack; shape=(len(X), total no. nodes in tree).
+    #     """
+    #     assert X.ndim == 2
+    #     X = check_data(X)
 
-        result = {}
+    #     result = {}
 
-        for i, tree in enumerate(self.trees_):
-            result[i] = tree.slack(X)  # shape=(len(X), total no. nodes in tree)
+    #     for i, tree in enumerate(self.trees_):
+    #         result[i] = tree.slack(X)  # shape=(len(X), total no. nodes in tree)
 
-        return result
+    #     return result
 
     def get_node_statistics(self):
         """
@@ -285,7 +290,7 @@ class RandomForestRegressor(object):
         return self
 
 
-class DecisionTreeRegresor(object):
+class DecisionTreeRegressor(object):
     """
     Dare tree, a decision tree that can efficiently
     remove training data AFTER training.
@@ -345,6 +350,9 @@ class DecisionTreeRegresor(object):
         """
         assert X.ndim == 2
         assert y.ndim == 1
+
+        # check criterion
+        assert self.criterion in ['absolute_error', 'squared_error']
 
         # set random state
         self.random_state_ = check_random_state(self.random_state)
@@ -425,21 +433,21 @@ class DecisionTreeRegresor(object):
         leaves = self.tree_.apply(X)
         return leaves
 
-    def slack(self, X):
-        """
-        Predict root-to-leaf slack: minimum number of examples needed to cause
-        retraining when ADDING to a specific decision node.
+    # def slack(self, X):
+    #     """
+    #     Predict root-to-leaf slack: minimum number of examples needed to cause
+    #     retraining when ADDING to a specific decision node.
 
-        Input
-            X: np.ndarray, 2d array of input data.
+    #     Input
+    #         X: np.ndarray, 2d array of input data.
 
-        Return
-            np.ndarray, 2d array of root-to-leaf slack; shape=(len(X), total no. nodes in tree).
-        """
-        assert X.ndim == 2
-        X = check_data(X)
-        slack_values = self.tree_.slack(X)
-        return slack_values
+    #     Return
+    #         np.ndarray, 2d array of root-to-leaf slack; shape=(len(X), total no. nodes in tree).
+    #     """
+    #     assert X.ndim == 2
+    #     X = check_data(X)
+    #     slack_values = self.tree_.slack(X)
+    #     return slack_values
 
     def get_node_statistics(self):
         """

@@ -48,8 +48,6 @@ cdef class _DataManager:
         cdef DTYPE_t** X = <DTYPE_t **>malloc(n_samples * sizeof(DTYPE_t *))
         cdef DTYPE_t*  y = <DTYPE_t *>malloc(n_samples * sizeof(DTYPE_t))
 
-        cdef SIZE_t *vacant = NULL
-
         cdef SIZE_t i
         cdef SIZE_t j
 
@@ -71,7 +69,7 @@ cdef class _DataManager:
         """
         # printf('[M] dealloc\n')
         if self.X:
-            for i in range(self.n_samples + self.n_vacant):
+            for i in range(self.n_samples):
                 if self.X[i]:
                     free(self.X[i])
             free(self.X)
@@ -84,7 +82,7 @@ cdef class _DataManager:
         """
         # printf('[M] clear data\n')
         if self.X:
-            for i in range(self.n_samples + self.n_vacant):
+            for i in range(self.n_samples):
                 if self.X[i]:
                     free(self.X[i])
             free(self.X)

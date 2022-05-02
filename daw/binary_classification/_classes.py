@@ -121,14 +121,14 @@ class RandomForestClassifier(object):
             # print('\n\nTree {:,}'.format(i))
 
             # build tree
-            tree = Tree(topd=self.topd_,
-                        k=self.k,
-                        max_depth=self.max_depth_,
-                        criterion=self.criterion,
-                        min_samples_split=self.min_samples_split,
-                        min_samples_leaf=self.min_samples_leaf,
-                        random_state=self.random_state_ + i,
-                        verbose=self.verbose)
+            tree = DecisionTreeClassifier(topd=self.topd_,
+                k=self.k,
+                max_depth=self.max_depth_,
+                criterion=self.criterion,
+                min_samples_split=self.min_samples_split,
+                min_samples_leaf=self.min_samples_leaf,
+                random_state=self.random_state_ + i,
+                verbose=self.verbose)
 
             tree = tree.fit(X, y, max_features=self.max_features_, manager=self.manager_)
 

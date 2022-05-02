@@ -90,20 +90,31 @@ cdef DTYPE_t compute_split_score(DTYPE_t** X,
     """
     Compute total error reduction for the given split.
     """
+    # printf('[U - CSS] get branch samples...\n')
+
     cdef IntList* left_samples = create_intlist(samples.n, 0)  # MUST FREE
     cdef IntList* right_samples = create_intlist(samples.n, 0)  # MUST FREE
     get_branch_samples(X, samples, feature_index, split_value, left_samples, right_samples)
 
-    cdef DTYPE_t total_score = compute_leaf_score(samples, y, criterion)
-    cdef DTYPE_t left_score = compute_leaf_score(left_samples, y, criterion)
-    cdef DTYPE_t right_score = compute_leaf_score(right_samples, y, criterion)
+    # printf('[U - CSS] no. left samples: %ld, no. right  samples: %ld\n',
+    #     left_samples.n, right_samples.n)
 
-    cdef DTYPE_t result = total_score - ((left_samples.n / samples.n) * left_score) - \
-                                        ((right_samples.n / samples.n) * right_score)
+    # cdef DTYPE_t total_score = compute_leaf_score(samples, y, criterion)
+    cdef DTYPE_t left_error = compute_leaf_score(left_samples, y, criterion)
+    cdef DTYPE_t right_error = compute_leaf_score(right_samples, y, criterion)
+
+    cdef DTYPE_t left_frac = <DTYPE_t> left_samples.n / samples.n
+    cdef DTYPE_t right_frac = <DTYPE_t> right_samples.n / samples.n
+
+    cdef DTYPE_t result = left_frac * left_error + right_frac * right_error
+
+    # printf('[U - CSS] left_error: %.5f, right_error: %.5f, split score: %.5f\n', left_error, right_error, result)
 
     # clean up
     free_intlist(left_samples)
     free_intlist(right_samples)
+
+    # printf('[U - CSS] done cleaning up.')
 
     return result
 
@@ -640,8 +651,13 @@ cdef DTYPE_t compute_median(DTYPE_t* vals, SIZE_t n) nogil:
     for i in range(n):
         sorted_vals[i] = vals[i]
 
+    # printf('[U - CM] sort values...\n')
+
     # sort label values and indices based on the label values
     sort(sorted_vals, NULL, n)  # TODO: can you put NULL here?
+
+    # for j in range(n):
+    #     printf('[U - CM] sorted_vals[%ld]: %.5f\n', j, sorted_vals[j])
 
     # extract median
     if n % 2 == 1:  # odd
@@ -650,6 +666,8 @@ cdef DTYPE_t compute_median(DTYPE_t* vals, SIZE_t n) nogil:
     else:  # even
         i = n / 2
         result = (sorted_vals[i-1] + sorted_vals[i]) / 2.0
+
+    # printf('[U - CM] median value: %.5f\n', result)
 
     # clean up
     free(sorted_vals)

@@ -16,7 +16,7 @@ cimport numpy as np
 np.import_array()
 
 from ._utils cimport compute_split_score
-from ._utils cimport compute_slack
+# from ._utils cimport compute_slack
 from ._utils cimport rand_uniform
 from ._utils cimport rand_int
 from ._utils cimport create_intlist
@@ -244,6 +244,9 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
                 final_thresholds[sampled_indices.n] = threshold
                 sampled_indices.arr[sampled_indices.n] = ndx
                 sampled_indices.n += 1
+
+                # printf('\n[S - SGT] compute split score for feature: %ld, split value: %.5f, criterion: %ld\n',
+                #     feature.index, threshold.value, criterion)
 
                 # compute split score
                 split_score = compute_split_score(X,
