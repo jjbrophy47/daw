@@ -30,40 +30,38 @@ cdef double rand_uniform(double    low,
                          UINT32_t* random_state) nogil
 
 # Split-scoring methods
-cdef DTYPE_t compute_split_score(bint    use_gini,
-                                 DTYPE_t count,
-                                 DTYPE_t left_count,
-                                 DTYPE_t right_count,
-                                 SIZE_t  left_pos_count,
-                                 SIZE_t  right_pos_count) nogil
+cdef DTYPE_t compute_split_score(DTYPE_t** X,
+                                 DTYPE_t*  y,
+                                 IntList*  samples,
+                                 SIZE_t    feature_index,
+                                 DTYPE_t   split_value,
+                                 SIZE_t    criterion) nogil
 
-cdef DTYPE_t compute_gini(DTYPE_t count,
-                          DTYPE_t left_count,
-                          DTYPE_t right_count,
-                          SIZE_t  left_pos_count,
-                          SIZE_t  right_pos_count) nogil
+cdef DTYPE_t compute_leaf_score(IntList* samples,
+                                DTYPE_t* y,
+                                SIZE_t   criterion) nogil
 
-cdef DTYPE_t compute_entropy(DTYPE_t count,
-                             DTYPE_t left_count,
-                             DTYPE_t right_count,
-                             SIZE_t  left_pos_count,
-                             SIZE_t  right_pos_count) nogil
+cdef DTYPE_t compute_leaf_value(IntList* samples,
+                                DTYPE_t* y,
+                                SIZE_t   criterion) nogil
+
+cdef DTYPE_t compute_leaf_error(IntList* samples,
+                                DTYPE_t* y,
+                                DTYPE_t  leaf_val,
+                                SIZE_t   criterion) nogil
 
 # Slack methods
-cdef SIZE_t compute_slack(Threshold* best_threshold,
-                          Threshold* second_threshold,
-                          SIZE_t     n,
-                          bint       use_gini) nogil
+# cdef SIZE_t compute_slack(Threshold* best_threshold,
+#                           Threshold* second_threshold,
+#                           SIZE_t     n) nogil
 
-cdef DTYPE_t compute_score_gap(Threshold* split1,
-                               Threshold* split2,
-                               SIZE_t     n,
-                               bint       use_gini) nogil
+# cdef DTYPE_t compute_score_gap(Threshold* split1,
+#                                Threshold* split2,
+#                                SIZE_t     n) nogil
 
-cdef DTYPE_t reduce_score_gap(Threshold* split1,
-                              Threshold* split2,
-                              SIZE_t     n,
-                              bint       use_gini) nogil
+# cdef DTYPE_t reduce_score_gap(Threshold* split1,
+#                               Threshold* split2,
+#                               SIZE_t     n) nogil
 
 # Feature / threshold methods
 cdef Feature* create_feature(SIZE_t feature_index) nogil
@@ -94,10 +92,22 @@ cdef INT32_t* copy_int_array(INT32_t* arr,
 cdef SIZE_t* copy_indices(SIZE_t* arr,
                           SIZE_t n_elem) nogil
 
+# Utility methods
+cdef DTYPE_t* extract_labels(IntList* samples, DTYPE_t* y) nogil
+cdef DTYPE_t compute_mean(DTYPE_t* vals, SIZE_t n) nogil
+cdef DTYPE_t compute_median(DTYPE_t* vals, SIZE_t n) nogil
+
 # Node methods
+cdef void get_branch_samples(DTYPE_t** X,
+                             IntList*  samples,
+                             SIZE_t    feature_index,
+                             DTYPE_t   split_value,
+                             IntList*  left_samples,
+                             IntList*  right_samples) nogil
+
 cdef void split_samples(Node*        node,
                         DTYPE_t**    X,
-                        INT32_t*     y,
+                        DTYPE_t*     y,
                         IntList*     samples,
                         SplitRecord* split,
                         bint         copy_constant_features) nogil

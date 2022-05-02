@@ -20,6 +20,11 @@ from ._tree import _TreeBuilder
 MAX_DEPTH_LIMIT = 1000
 MAX_INT = 2147483647
 
+CRITERION_ENUM {
+    'absolute_error': 0,
+    'squared_error': 1
+}
+
 
 class RandomForestRegressor(object):
     """
@@ -40,7 +45,7 @@ class RandomForestRegressor(object):
         If None or 'sqrt', then max_features=sqrt(n_features).
     max_depth: int (default=None)
         The maximum depth of a tree.
-    criterion: str (default='variance_reduction')
+    criterion: str (default='absolute_error')
         Splitting criterion to use.
     min_samples_split: int (default=2)
         The minimum number of samples needed to make a split when building a tree.
@@ -57,7 +62,7 @@ class RandomForestRegressor(object):
                  n_estimators=100,
                  max_features='sqrt',
                  max_depth=10,
-                 criterion='variance_reduction',
+                 criterion='absolute_error',
                  min_samples_split=2,
                  min_samples_leaf=1,
                  random_state=None,
@@ -140,9 +145,9 @@ class RandomForestRegressor(object):
 
         return self
 
-    def predict(self, X):
+    def predict(self, X, median=False):
         """
-        Mean of Means.
+        Mean or median of outputs.
 
         Predict mean regression value for each tree,
         then take the mean of all tree outputs.
@@ -156,37 +161,15 @@ class RandomForestRegressor(object):
         check_data(X)
 
         # sum all predictions instead of storing them
-        preds = np.zeros(X.shape[0])
+        preds = np.zeros((X.shape[0], len(self.trees)))  # shape=(len(X), n_tree)
         for i, tree in enumerate(self.trees_):
-            preds += tree.predict(X)  # shape=(len(X),)
+            preds[:, i] = tree.predict(X)  # shape=(len(X),)
 
         # aggregate
-        preds = preds / len(self.trees_)
-
-        return preds
-
-    def predict_median(self, X):
-        """
-        Median of Medians.
-
-        Predict median regression value for each tree
-        then take the median of all tree outputs.
-
-        Input
-            X: np.ndarray, 2d array of input data.
-
-        Return
-            np.ndarray, 1d array of median values; shape=(len(X)).
-        """
-        check_data(X)
-
-        # sum all predictions instead of storing them
-        preds = np.zeros((X.shape[0], len(self.trees_)))  # shape=(len(X), no. trees)
-        for i, tree in enumerate(self.trees_):
-            preds[:, i] = tree.predict_median(X)  # shape=(len(X),)
-
-        # aggregate
-        preds = np.median(preds, axis=1)  # shape=(len(X),)
+        if median:
+            preds = np.median(preds, axis=1)  # shape=(len(X),)
+        else:  # mean
+            preds = np.mean(preds, axis=1)  # shape=(len(X),)
 
         return preds
 
@@ -330,7 +313,7 @@ class DecisionTreeRegresor(object):
                  topd=0,
                  k=25,
                  max_depth=10,
-                 criterion='variance_reduction',
+                 criterion='absolute_error',
                  min_samples_split=2,
                  min_samples_leaf=1,
                  random_state=None,
@@ -395,6 +378,7 @@ class DecisionTreeRegresor(object):
                                self.topd_,
                                self.k,
                                self.max_features_,
+                               CRITERION_ENUM[self.criterion],
                                self.random_state_)
 
         self.splitter_ = _Splitter(self.config_)
@@ -413,7 +397,7 @@ class DecisionTreeRegresor(object):
 
     def predict(self, X):
         """
-        Prediction mean regression value for each x in X.
+        Output leaf value for each x in X.
 
         Input
             X: np.ndarray, 2d array of input data.
@@ -424,21 +408,6 @@ class DecisionTreeRegresor(object):
         assert X.ndim == 2
         X = check_data(X)
         preds = self.tree_.predict(X)  # shape=(len(X),)
-        return preds
-
-    def predict_median(self, X):
-        """
-        Prediction median regression value for each x in X.
-
-        Input
-            X: np.ndarray, 2d array of input data.
-
-        Return
-            np.ndarray, 2d array of input data.
-        """
-        assert X.ndim == 2
-        X = check_data(X)
-        preds = self.tree_.predict_median(X)  # shape=(len(X),)
         return preds
 
     def apply(self, X):

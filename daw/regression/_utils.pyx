@@ -11,6 +11,8 @@ from libc.stdlib cimport rand
 from libc.stdlib cimport srand
 from libc.stdlib cimport RAND_MAX
 from libc.stdio cimport printf
+from libc.math cimport ceil
+from libc.math cimport pow
 from libc.math cimport exp
 from libc.math cimport log
 from libc.math cimport log2
@@ -21,6 +23,8 @@ cimport cython
 import numpy as np
 cimport numpy as np
 np.import_array()
+
+from ._argsort cimport sort
 
 from ._tree cimport UNDEF
 from ._tree cimport UNDEF_LEAF_VAL
@@ -73,322 +77,315 @@ cdef inline double rand_uniform(double low, double high,
     return ((high - low) * <double> our_rand_r(random_state) /
             <double> RAND_R_MAX) + low
 
+
 # SCORING METHODS
 
-cdef DTYPE_t compute_split_score(bint    use_gini,
-                                 DTYPE_t count,
-                                 DTYPE_t left_count,
-                                 DTYPE_t right_count,
-                                 SIZE_t  left_pos_count,
-                                 SIZE_t  right_pos_count) nogil:
-    """
-    Computes either the Gini index or entropy given this attribute.
-    """
-    cdef DTYPE_t result
 
-    if use_gini:
-        result = compute_gini(count, left_count, right_count,
-                              left_pos_count, right_pos_count)
+cdef DTYPE_t compute_split_score(DTYPE_t** X,
+                                 DTYPE_t*  y,
+                                 IntList*  samples,
+                                 SIZE_t    feature_index,
+                                 DTYPE_t   split_value,
+                                 SIZE_t    criterion) nogil:
+    """
+    Compute total error reduction for the given split.
+    """
+    cdef IntList* left_samples = create_intlist(samples.n, 0)  # MUST FREE
+    cdef IntList* right_samples = create_intlist(samples.n, 0)  # MUST FREE
+    get_branch_samples(X, samples, feature_index, split_value, left_samples, right_samples)
 
-    else:
-        result = compute_entropy(count, left_count, right_count,
-                                 left_pos_count, right_pos_count)
+    cdef DTYPE_t total_score = compute_leaf_score(samples, y, criterion)
+    cdef DTYPE_t left_score = compute_leaf_score(left_samples, y, criterion)
+    cdef DTYPE_t right_score = compute_leaf_score(right_samples, y, criterion)
+
+    cdef DTYPE_t result = total_score - ((left_samples.n / samples.n) * left_score) - \
+                                        ((right_samples.n / samples.n) * right_score)
+
+    # clean up
+    free_intlist(left_samples)
+    free_intlist(right_samples)
 
     return result
 
 
-cdef DTYPE_t compute_gini(DTYPE_t count,
-                          DTYPE_t left_count,
-                          DTYPE_t right_count,
-                          SIZE_t  left_pos_count,
-                          SIZE_t  right_pos_count) nogil:
+cdef DTYPE_t compute_leaf_score(IntList* samples,
+                                DTYPE_t* y,
+                                SIZE_t   criterion) nogil:
     """
-    Compute the Gini index given this attribute.
+    Computes leaf score, either mean-squared error or median absolute error.
     """
-    cdef DTYPE_t weight
-    cdef DTYPE_t pos_prob
-    cdef DTYPE_t neg_prob
-
-    cdef DTYPE_t index
-    cdef DTYPE_t left_weighted_index = 0
-    cdef DTYPE_t right_weighted_index = 0
-
-    if left_count > 0:
-        weight = left_count / count
-        pos_prob = left_pos_count / left_count
-        neg_prob = 1 - pos_prob
-        index = 1 - (pos_prob * pos_prob) - (neg_prob * neg_prob)
-        left_weighted_index = weight * index
-
-    if right_count > 0:
-        weight = right_count / count
-        pos_prob = right_pos_count / right_count
-        neg_prob = 1 - pos_prob
-        index = 1 - (pos_prob * pos_prob) - (neg_prob * neg_prob)
-        right_weighted_index = weight * index
-
-    return left_weighted_index + right_weighted_index
+    cdef DTYPE_t leaf_val = compute_leaf_value(samples, y, criterion)
+    cdef DTYPE_t leaf_err = compute_leaf_error(samples, y, leaf_val, criterion)
+    return leaf_err
 
 
-cdef DTYPE_t compute_entropy(DTYPE_t count,
-                             DTYPE_t left_count,
-                             DTYPE_t right_count,
-                             SIZE_t  left_pos_count,
-                             SIZE_t  right_pos_count) nogil:
+cdef DTYPE_t compute_leaf_value(IntList* samples,
+                                DTYPE_t* y,
+                                SIZE_t   criterion) nogil:
     """
-    Compute the mutual information given this attribute.
+    Computes leaf value, either mean or median of the labels.
     """
-    cdef DTYPE_t weight
-    cdef DTYPE_t pos_prob
-    cdef DTYPE_t neg_prob
+    cdef DTYPE_t result = 0
+    cdef DTYPE_t* vals = extract_labels(samples, y)  # MUST FREE
 
-    cdef DTYPE_t entropy
-    cdef DTYPE_t left_weighted_entropy = 0
-    cdef DTYPE_t right_weighted_entropy = 0
+    # mean squared error
+    # https://scikit-learn.org/stable/modules/model_evaluation.html#median-absolute-error
+    if criterion == 0:
+        result = compute_median(vals, samples.n)
 
-    if left_count > 0:
-        weight = left_count / count
-        pos_prob = left_pos_count / left_count
-        neg_prob = 1 - pos_prob
+    # mean squared error
+    # https://scikit-learn.org/stable/modules/model_evaluation.html#mean-squared-error
+    elif criterion == 1:
+        result = compute_mean(vals, samples.n)
 
-        entropy = 0
-        if pos_prob > 0:
-            entropy -= pos_prob * log2(pos_prob)
-        if neg_prob > 0:
-            entropy -= neg_prob * log2(neg_prob)
+    # clean up
+    free(vals)
 
-        left_weighted_entropy = weight * entropy
+    return result
 
-    if right_count > 0:
-        weight = right_count / count
-        pos_prob = right_pos_count / right_count
-        neg_prob = 1 - pos_prob
 
-        entropy = 0
-        if pos_prob > 0:
-            entropy -= pos_prob * log2(pos_prob)
-        if neg_prob > 0:
-            entropy -= neg_prob * log2(neg_prob)
+cdef DTYPE_t compute_leaf_error(IntList* samples,
+                                DTYPE_t* y,
+                                DTYPE_t  leaf_val,
+                                SIZE_t   criterion) nogil:
+    """
+    Computes purity of the leaf via mean-squared error or median absolute error.
+    """
+    cdef DTYPE_t  result = 0
+    cdef DTYPE_t* errors = <DTYPE_t *>malloc(samples.n * sizeof(DTYPE_t))
 
-        right_weighted_entropy = weight * entropy
+    # median absolute error
+    # https://scikit-learn.org/stable/modules/model_evaluation.html#median-absolute-error
+    if criterion == 0:
+        for i in range(samples.n):
+            errors[i] = fabs(y[samples.arr[i]] - leaf_val)
+        result = compute_median(errors, samples.n)
 
-    return left_weighted_entropy + right_weighted_entropy
+    # mean squared error
+    # https://scikit-learn.org/stable/modules/model_evaluation.html#mean-squared-error
+    elif criterion == 1:
+        for i in range(samples.n):
+            errors[i] = pow(y[samples.arr[i]] - leaf_val, 2)
+        result = compute_mean(errors, samples.n)
+
+    # clean up
+    free(errors)
+
+    return result
 
 
 # SLACK METHODS
 
 
-cdef SIZE_t compute_slack(Threshold* best_threshold,
-                          Threshold* second_threshold,
-                          SIZE_t     n,
-                          bint       use_gini) nogil:
-    """
-    Compute slack between the first and second best splits.
+# cdef SIZE_t compute_slack(Threshold* best_threshold,
+#                           Threshold* second_threshold,
+#                           SIZE_t     n,
+#                           bint       use_gini) nogil:
+#     """
+#     Compute slack between the first and second best splits.
 
-    Note: It is assumed `best_threshold` is a "better" split than `second_threshold`.
-    """
+#     Note: It is assumed `best_threshold` is a "better" split than `second_threshold`.
+#     """
 
-    # TODO: what should this return if only 1 valid threshold?
-    if second_threshold == NULL:
-        return 1
+#     # TODO: what should this return if only 1 valid threshold?
+#     if second_threshold == NULL:
+#         return 1
 
-    # initial conditions
-    cdef Threshold* split1 = copy_threshold(best_threshold)
-    cdef Threshold* split2 = copy_threshold(second_threshold)
-    cdef DTYPE_t score_gap = compute_score_gap(split1, split2, n, use_gini)
+#     # initial conditions
+#     cdef Threshold* split1 = copy_threshold(best_threshold)
+#     cdef Threshold* split2 = copy_threshold(second_threshold)
+#     cdef DTYPE_t score_gap = compute_score_gap(split1, split2, n, use_gini)
 
-    if score_gap < 0:
-        printf('[WARNING] split2 is better than split1!')
+#     if score_gap < 0:
+#         printf('[WARNING] split2 is better than split1!')
 
-    # result variable
-    cdef SIZE_t slack = 0
+#     # result variable
+#     cdef SIZE_t slack = 0
 
-    # compute slack
-    while score_gap >= 0:
-        score_gap = reduce_score_gap(split1, split2, n, use_gini)
-        slack += 1
-        n += 1
+#     # compute slack
+#     while score_gap >= 0:
+#         score_gap = reduce_score_gap(split1, split2, n, use_gini)
+#         slack += 1
+#         n += 1
 
-    free(split1)
-    free(split2)
+#     free(split1)
+#     free(split2)
 
-    return slack
+#     return slack
 
-cdef DTYPE_t compute_score_gap(Threshold* split1,
-                               Threshold* split2,
-                               SIZE_t     n,
-                               bint       use_gini) nogil:
-    """
-    Computes the score gap between the given splits.
+# cdef DTYPE_t compute_score_gap(Threshold* split1,
+#                                Threshold* split2,
+#                                SIZE_t     n,
+#                                bint       use_gini) nogil:
+#     """
+#     Computes the score gap between the given splits.
 
-    Return
-        DTYPE_t, score gap.
-    """
-    cdef DTYPE_t g1 = compute_split_score(use_gini,
-                                          n,
-                                          split1.n_left_samples,
-                                          split1.n_right_samples,
-                                          split1.n_left_pos_samples,
-                                          split1.n_right_pos_samples)
-    cdef DTYPE_t g2 = compute_split_score(use_gini,
-                                          n,
-                                          split2.n_left_samples,
-                                          split2.n_right_samples,
-                                          split2.n_left_pos_samples,
-                                          split2.n_right_pos_samples)
-    cdef DTYPE_t score_gap = g2 - g1
+#     Return
+#         DTYPE_t, score gap.
+#     """
+#     cdef DTYPE_t g1 = compute_split_score(n,
+#                                           split1.n_left_samples,
+#                                           split1.n_right_samples,
+#                                           split1.n_left_pos_samples,
+#                                           split1.n_right_pos_samples)
+#     cdef DTYPE_t g2 = compute_split_score(n,
+#                                           split2.n_left_samples,
+#                                           split2.n_right_samples,
+#                                           split2.n_left_pos_samples,
+#                                           split2.n_right_pos_samples)
+#     cdef DTYPE_t score_gap = g2 - g1
 
-    return score_gap
+#     return score_gap
 
-cdef DTYPE_t reduce_score_gap(Threshold* split1,
-                              Threshold* split2,
-                              SIZE_t     n,
-                              bint       use_gini) nogil:
-    """
-    Finds the ADD operation that reduces the score gap the most.
+# cdef DTYPE_t reduce_score_gap(Threshold* split1,
+#                               Threshold* split2,
+#                               SIZE_t     n,
+#                               bint       use_gini) nogil:
+#     """
+#     Finds the ADD operation that reduces the score gap the most.
 
-    Return
-        DTYPE_t, new score gap.
-    """
-    cdef DTYPE_t score_gap = 1000000
-    cdef DTYPE_t temp_gap = -1
-    cdef SIZE_t best_case = -1
+#     Return
+#         DTYPE_t, new score gap.
+#     """
+#     cdef DTYPE_t score_gap = 1000000
+#     cdef DTYPE_t temp_gap = -1
+#     cdef SIZE_t best_case = -1
 
-    n += 1
+#     n += 1
 
-    # Case 0: add 0 to left branches
-    split1.n_left_samples += 1
-    split2.n_left_samples += 1
-    temp_gap = compute_score_gap(split1, split2, n, use_gini)
-    if temp_gap < score_gap:
-        score_gap = temp_gap
-        best_case = 0
-    split1.n_left_samples -= 1
-    split2.n_left_samples -= 1
+#     # Case 0: add 0 to left branches
+#     split1.n_left_samples += 1
+#     split2.n_left_samples += 1
+#     temp_gap = compute_score_gap(split1, split2, n, use_gini)
+#     if temp_gap < score_gap:
+#         score_gap = temp_gap
+#         best_case = 0
+#     split1.n_left_samples -= 1
+#     split2.n_left_samples -= 1
 
-    # Case 1: add 1 to left branches
-    split1.n_left_samples += 1
-    split1.n_left_pos_samples += 1
-    split2.n_left_samples += 1
-    split2.n_left_pos_samples += 1
-    temp_gap = compute_score_gap(split1, split2, n, use_gini)
-    if temp_gap < score_gap:
-        score_gap = temp_gap
-        best_case = 1
-    split1.n_left_samples -= 1
-    split1.n_left_pos_samples -= 1
-    split2.n_left_samples -= 1
-    split2.n_left_pos_samples -= 1
+#     # Case 1: add 1 to left branches
+#     split1.n_left_samples += 1
+#     split1.n_left_pos_samples += 1
+#     split2.n_left_samples += 1
+#     split2.n_left_pos_samples += 1
+#     temp_gap = compute_score_gap(split1, split2, n, use_gini)
+#     if temp_gap < score_gap:
+#         score_gap = temp_gap
+#         best_case = 1
+#     split1.n_left_samples -= 1
+#     split1.n_left_pos_samples -= 1
+#     split2.n_left_samples -= 1
+#     split2.n_left_pos_samples -= 1
 
-    # Case 2: add 0 to right branches
-    split1.n_right_samples += 1
-    split2.n_right_samples += 1
-    temp_gap = compute_score_gap(split1, split2, n, use_gini)
-    if temp_gap < score_gap:
-        score_gap = temp_gap
-        best_case = 2
-    split1.n_right_samples -= 1
-    split2.n_right_samples -= 1
+#     # Case 2: add 0 to right branches
+#     split1.n_right_samples += 1
+#     split2.n_right_samples += 1
+#     temp_gap = compute_score_gap(split1, split2, n, use_gini)
+#     if temp_gap < score_gap:
+#         score_gap = temp_gap
+#         best_case = 2
+#     split1.n_right_samples -= 1
+#     split2.n_right_samples -= 1
 
-    # Case 3: add 1 to right branches
-    split1.n_right_samples += 1
-    split1.n_right_pos_samples += 1
-    split2.n_right_samples += 1
-    split2.n_right_pos_samples += 1
-    temp_gap = compute_score_gap(split1, split2, n, use_gini)
-    if temp_gap < score_gap:
-        score_gap = temp_gap
-        best_case = 3
-    split1.n_right_samples -= 1
-    split1.n_right_pos_samples -= 1
-    split2.n_right_samples -= 1
-    split2.n_right_pos_samples -= 1
+#     # Case 3: add 1 to right branches
+#     split1.n_right_samples += 1
+#     split1.n_right_pos_samples += 1
+#     split2.n_right_samples += 1
+#     split2.n_right_pos_samples += 1
+#     temp_gap = compute_score_gap(split1, split2, n, use_gini)
+#     if temp_gap < score_gap:
+#         score_gap = temp_gap
+#         best_case = 3
+#     split1.n_right_samples -= 1
+#     split1.n_right_pos_samples -= 1
+#     split2.n_right_samples -= 1
+#     split2.n_right_pos_samples -= 1
 
-    # Case 4: add 0 to split1 left branch and split2 right branch
-    split1.n_left_samples += 1
-    split2.n_right_samples += 1
-    temp_gap = compute_score_gap(split1, split2, n, use_gini)
-    if temp_gap < score_gap:
-        score_gap = temp_gap
-        best_case = 4
-    split1.n_left_samples -= 1
-    split2.n_right_samples -= 1
+#     # Case 4: add 0 to split1 left branch and split2 right branch
+#     split1.n_left_samples += 1
+#     split2.n_right_samples += 1
+#     temp_gap = compute_score_gap(split1, split2, n, use_gini)
+#     if temp_gap < score_gap:
+#         score_gap = temp_gap
+#         best_case = 4
+#     split1.n_left_samples -= 1
+#     split2.n_right_samples -= 1
 
-    # Case 5: add 1 to split1 left branch and split2 right branch
-    split1.n_left_samples += 1
-    split1.n_left_pos_samples += 1
-    split2.n_right_samples += 1
-    split2.n_right_pos_samples += 1
-    temp_gap = compute_score_gap(split1, split2, n, use_gini)
-    if temp_gap < score_gap:
-        score_gap = temp_gap
-        best_case = 5
-    split1.n_left_samples -= 1
-    split1.n_left_pos_samples -= 1
-    split2.n_right_samples -= 1
-    split2.n_right_pos_samples -= 1
+#     # Case 5: add 1 to split1 left branch and split2 right branch
+#     split1.n_left_samples += 1
+#     split1.n_left_pos_samples += 1
+#     split2.n_right_samples += 1
+#     split2.n_right_pos_samples += 1
+#     temp_gap = compute_score_gap(split1, split2, n, use_gini)
+#     if temp_gap < score_gap:
+#         score_gap = temp_gap
+#         best_case = 5
+#     split1.n_left_samples -= 1
+#     split1.n_left_pos_samples -= 1
+#     split2.n_right_samples -= 1
+#     split2.n_right_pos_samples -= 1
 
-    # Case 6: add 0 to split1 right branch and split2 left branch
-    split1.n_right_samples += 1
-    split2.n_left_samples += 1
-    temp_gap = compute_score_gap(split1, split2, n, use_gini)
-    if temp_gap < score_gap:
-        score_gap = temp_gap
-        best_case = 6
-    split1.n_right_samples -= 1
-    split2.n_left_samples -= 1
+#     # Case 6: add 0 to split1 right branch and split2 left branch
+#     split1.n_right_samples += 1
+#     split2.n_left_samples += 1
+#     temp_gap = compute_score_gap(split1, split2, n, use_gini)
+#     if temp_gap < score_gap:
+#         score_gap = temp_gap
+#         best_case = 6
+#     split1.n_right_samples -= 1
+#     split2.n_left_samples -= 1
 
-    # Case 7: add 1 to split1 right branch and split2 left branch
-    split1.n_right_samples += 1
-    split1.n_right_pos_samples += 1
-    split2.n_left_samples += 1
-    split2.n_left_pos_samples += 1
-    temp_gap = compute_score_gap(split1, split2, n, use_gini)
-    if temp_gap < score_gap:
-        score_gap = temp_gap
-        best_case = 7
-    split1.n_right_samples -= 1
-    split1.n_right_pos_samples -= 1
-    split2.n_left_samples -= 1
-    split2.n_left_pos_samples -= 1
+#     # Case 7: add 1 to split1 right branch and split2 left branch
+#     split1.n_right_samples += 1
+#     split1.n_right_pos_samples += 1
+#     split2.n_left_samples += 1
+#     split2.n_left_pos_samples += 1
+#     temp_gap = compute_score_gap(split1, split2, n, use_gini)
+#     if temp_gap < score_gap:
+#         score_gap = temp_gap
+#         best_case = 7
+#     split1.n_right_samples -= 1
+#     split1.n_right_pos_samples -= 1
+#     split2.n_left_samples -= 1
+#     split2.n_left_pos_samples -= 1
 
-    # update splits based on the chosen operation
-    if best_case == 0:
-        split1.n_left_samples += 1
-        split2.n_left_samples += 1
-    elif best_case == 1:
-        split1.n_left_samples += 1
-        split1.n_left_pos_samples += 1
-        split2.n_left_samples += 1
-        split2.n_left_pos_samples += 1
-    elif best_case == 2:
-        split1.n_right_samples += 1
-        split2.n_right_samples += 1
-    elif best_case == 3:
-        split1.n_right_samples += 1
-        split1.n_right_pos_samples += 1
-        split2.n_right_samples += 1
-        split2.n_right_pos_samples += 1
-    elif best_case == 4:
-        split1.n_left_samples += 1
-        split2.n_right_samples += 1
-    elif best_case == 5:
-        split1.n_left_samples += 1
-        split1.n_left_pos_samples += 1
-        split2.n_right_samples += 1
-        split2.n_right_pos_samples += 1
-    elif best_case == 6:
-        split1.n_right_samples += 1
-        split2.n_left_samples += 1
-    elif best_case == 7:
-        split1.n_right_samples += 1
-        split1.n_right_pos_samples += 1
-        split2.n_left_samples += 1
-        split2.n_left_pos_samples += 1
-    else:
-        printf('\n[WARNING] No operation reduced score gap!')
+#     # update splits based on the chosen operation
+#     if best_case == 0:
+#         split1.n_left_samples += 1
+#         split2.n_left_samples += 1
+#     elif best_case == 1:
+#         split1.n_left_samples += 1
+#         split1.n_left_pos_samples += 1
+#         split2.n_left_samples += 1
+#         split2.n_left_pos_samples += 1
+#     elif best_case == 2:
+#         split1.n_right_samples += 1
+#         split2.n_right_samples += 1
+#     elif best_case == 3:
+#         split1.n_right_samples += 1
+#         split1.n_right_pos_samples += 1
+#         split2.n_right_samples += 1
+#         split2.n_right_pos_samples += 1
+#     elif best_case == 4:
+#         split1.n_left_samples += 1
+#         split2.n_right_samples += 1
+#     elif best_case == 5:
+#         split1.n_left_samples += 1
+#         split1.n_left_pos_samples += 1
+#         split2.n_right_samples += 1
+#         split2.n_right_pos_samples += 1
+#     elif best_case == 6:
+#         split1.n_right_samples += 1
+#         split2.n_left_samples += 1
+#     elif best_case == 7:
+#         split1.n_right_samples += 1
+#         split1.n_right_pos_samples += 1
+#         split2.n_left_samples += 1
+#         split2.n_left_pos_samples += 1
+#     else:
+#         printf('\n[WARNING] No operation reduced score gap!')
 
-    return score_gap
+#     return score_gap
 
 
 # FEATURE / THRESHOLD METHODS
@@ -418,11 +415,7 @@ cdef Threshold* create_threshold(DTYPE_t value,
     threshold.v1 = 0
     threshold.v2 = 0
     threshold.n_v1_samples = 0
-    threshold.n_v1_pos_samples = 0
     threshold.n_v2_samples = 0
-    threshold.n_v2_pos_samples = 0
-    threshold.n_left_pos_samples = 0
-    threshold.n_right_pos_samples = 0
     return threshold
 
 
@@ -466,13 +459,9 @@ cdef Threshold* copy_threshold(Threshold* threshold) nogil:
     new_threshold.v2 = threshold.v2
     new_threshold.value = threshold.value
     new_threshold.n_v1_samples = threshold.n_v1_samples
-    new_threshold.n_v1_pos_samples = threshold.n_v1_pos_samples
     new_threshold.n_v2_samples = threshold.n_v2_samples
-    new_threshold.n_v2_pos_samples = threshold.n_v2_pos_samples
     new_threshold.n_left_samples = threshold.n_left_samples
-    new_threshold.n_left_pos_samples = threshold.n_left_pos_samples
     new_threshold.n_right_samples = threshold.n_right_samples
-    new_threshold.n_right_pos_samples = threshold.n_right_pos_samples
     return new_threshold
 
 
@@ -606,12 +595,112 @@ cdef SIZE_t* copy_indices(SIZE_t* arr, SIZE_t n_elem) nogil:
     return new_arr
 
 
+# Utility methods
+
+cdef DTYPE_t* extract_labels(IntList* samples, DTYPE_t* y) nogil:
+    """
+    Extracts label data for a given set of samples.
+
+    NOTE: Returns an allocated array, caller must free this array!
+    """
+    cdef DTYPE_t* vals = <DTYPE_t *>malloc(samples.n * sizeof(DTYPE_t))
+    for i in range(samples.n):
+        vals[i] = y[samples.arr[i]]
+    return vals
+
+cdef DTYPE_t compute_mean(DTYPE_t* vals, SIZE_t n) nogil:
+    """
+    Compute the mean value of the given array.
+    """
+    cdef SIZE_t i = 0
+    cdef DTYPE_t val_sum = 0
+
+    for i in range(n):
+        val_sum += vals[i]
+
+    return val_sum / n
+
+
+cdef DTYPE_t compute_median(DTYPE_t* vals, SIZE_t n) nogil:
+    """
+    Compute the median value of the given array.
+    """
+
+    # catch base cases
+    if n == 1:
+        return vals[0]
+    elif n == 2:
+        return (vals[0] + vals[1]) / 2.0
+
+    cdef SIZE_t  i = 0
+    cdef DTYPE_t result = 0
+
+    # copy label values and indices
+    cdef DTYPE_t* sorted_vals = <DTYPE_t *>malloc(n * sizeof(DTYPE_t))  # MUST FREE
+    for i in range(n):
+        sorted_vals[i] = vals[i]
+
+    # sort label values and indices based on the label values
+    sort(sorted_vals, NULL, n)  # TODO: can you put NULL here?
+
+    # extract median
+    if n % 2 == 1:  # odd
+        i = <SIZE_t> ceil(n / 2.0)
+        result = sorted_vals[i]
+    else:  # even
+        i = n / 2
+        result = (sorted_vals[i-1] + sorted_vals[i]) / 2.0
+
+    # clean up
+    free(sorted_vals)
+
+    return result
+
+
 # NODE METHODS
+
+
+cdef void get_branch_samples(DTYPE_t** X,
+                             IntList*  samples,
+                             SIZE_t    feature_index,
+                             DTYPE_t   split_value,
+                             IntList*  left_samples,
+                             IntList*  right_samples) nogil:
+    """
+    More generic form of `split_samples`.
+    """
+
+    # loop through the deleted samples
+    for i in range(samples.n):
+
+        # add sample to the left branch
+        if X[samples.arr[i]][feature_index] <= split_value:
+            left_samples.arr[left_samples.n] = samples.arr[i]
+            left_samples.n += 1
+
+        # add sample to the right branch
+        else:
+            right_samples.arr[right_samples.n] = samples.arr[i]
+            right_samples.n += 1
+
+    # resize left branch
+    if left_samples.n > 0:
+        left_samples.arr = <SIZE_t *>realloc(left_samples.arr, left_samples.n * sizeof(SIZE_t))
+    else:
+        free_intlist(left_samples)
+        left_samples = NULL
+
+    # resize right branch
+    if right_samples.n > 0:
+        right_samples.arr = <SIZE_t *>realloc(right_samples.arr, right_samples.n * sizeof(SIZE_t))
+    else:
+        free_intlist(right_samples)
+        right_samples = NULL
 
 
 cdef void split_samples(Node*        node,
                         DTYPE_t**    X,
-                        INT32_t*     y,
+                        DTYPE_t*     y,
                         IntList*     samples,
                         SplitRecord* split,
                         bint         copy_constant_features) nogil:

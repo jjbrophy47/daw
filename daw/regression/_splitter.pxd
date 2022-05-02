@@ -30,15 +30,15 @@ cdef class _Splitter:
     cdef SIZE_t select_threshold(self,
                                  Node*        node,
                                  DTYPE_t**    X,
-                                 INT32_t*     y,
+                                 DTYPE_t*     y,
                                  IntList*     samples,
                                  SIZE_t       n_total_features) nogil
 
 # Helper methods
 cdef SIZE_t select_greedy_threshold(Node*     node,
                                     DTYPE_t** X,
-                                    INT32_t*  y,
-                                    IntList* samples,
+                                    DTYPE_t*  y,
+                                    IntList*  samples,
                                     SIZE_t    n_total_features,
                                     _Config   config) nogil
 
@@ -49,9 +49,8 @@ cdef SIZE_t select_random_threshold(Node*     node,
                                     _Config   config) nogil
 
 cdef SIZE_t get_candidate_thresholds(DTYPE_t*     values,
-                                     INT32_t*     labels,
+                                     DTYPE_t*     labels,
                                      SIZE_t*      indices,
                                      SIZE_t       n_samples,
-                                     SIZE_t       n_pos_samples,
                                      SIZE_t       min_samples_leaf,
                                      Threshold*** thresholds_ptr) nogil

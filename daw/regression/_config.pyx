@@ -15,13 +15,14 @@ cdef class _Config:
     """
 
     def __cinit__(self,
-                  SIZE_t       min_samples_split,
-                  SIZE_t       min_samples_leaf,
-                  SIZE_t       max_depth,
-                  SIZE_t       topd,
-                  SIZE_t       k,
-                  SIZE_t       max_features,
-                  object       random_state):
+                  SIZE_t min_samples_split,
+                  SIZE_t min_samples_leaf,
+                  SIZE_t max_depth,
+                  SIZE_t topd,
+                  SIZE_t k,
+                  SIZE_t max_features,
+                  SIZE_t criterion,
+                  object random_state):
 
         self.min_samples_split = min_samples_split
         self.min_samples_leaf = min_samples_leaf
@@ -29,4 +30,5 @@ cdef class _Config:
         self.topd = topd
         self.k = k
         self.max_features = max_features
+        self.criterion = criterion
         self.rand_r_state = random_state.randint(0, RAND_R_MAX)

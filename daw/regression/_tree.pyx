@@ -19,8 +19,7 @@ import numpy as np
 cimport numpy as np
 np.import_array()
 
-from ._utils cimport compute_mean
-from ._utils cimport compute_median
+from ._utils cimport compute_leaf_value
 from ._utils cimport split_samples
 from ._utils cimport copy_indices
 from ._utils cimport create_intlist
@@ -108,7 +107,7 @@ cdef class _TreeBuilder:
         # leaf node
         if is_bottom_leaf or is_middle_leaf:
             # printf('[B] bottom / middle leaf\n')
-            self.set_leaf_node(node, samples)
+            self.set_leaf_node(node, samples, y)
             # printf('[B] leaf.value: %.2f\n', node.value)
 
         # leaf or decision node
@@ -154,9 +153,7 @@ cdef class _TreeBuilder:
         node.leaf_id = self.leaf_count_
         node.is_leaf = True
         node.leaf_samples = copy_indices(samples.arr, samples.n)
-        node.value_mean = compute_mean(samples.arr, samples.n, y)
-        node.value_median = compute_mean(samples.arr, samples.n, y)
-        # node.value = node.n_pos_samples / <double> node.n_samples
+        node.value = compute_leaf_value(samples, y, self.config.criterion)
 
         # set greedy node properties
         node.features = NULL
@@ -188,15 +185,6 @@ cdef class _TreeBuilder:
         Create and initialize a new node.
         """
 
-        # compute number of positive samples
-        # cdef SIZE_t n_pos_samples = 0
-        # printf('[B - IN] computing n_pos_samples\n')
-        # printf('[B - IN] samples.n: %lu\n', samples.n)
-        # for i in range(samples.n):
-        #     n_pos_samples += y[samples.arr[i]]
-
-        # printf('[B - IN] n_pos_samples: %lu\n', n_pos_samples)
-
         # create node
         cdef Node *node = <Node *>malloc(sizeof(Node))
 
@@ -221,8 +209,7 @@ cdef class _TreeBuilder:
         # initialize leaf-specific properties
         node.leaf_id = -1
         node.is_leaf = False
-        node.value_mean = UNDEF_LEAF_VAL
-        node.value_median = UNDEF_LEAF_VAL
+        node.value = UNDEF_LEAF_VAL
         node.leaf_samples = NULL
 
         self.node_count_ += 1
@@ -253,7 +240,7 @@ cdef class _Tree:
 
     cpdef np.ndarray predict(self, float[:,:] X):
         """
-        Predict probability of positive label for X.
+        Predict mean regression values for X.
         """
 
         # In / out
@@ -432,7 +419,6 @@ cdef class _Tree:
 
             # add instance counts
             result += sizeof(node.n_samples)
-            result += sizeof(node.n_pos_samples)
 
             # add constant features memory usage
             result += sizeof(node.constant_features)
@@ -475,7 +461,6 @@ cdef class _Tree:
 
             # add instance counts
             result += sizeof(node.n_samples)
-            result += sizeof(node.n_pos_samples)
 
             # add instance pointers
             result += sizeof(node.leaf_samples)

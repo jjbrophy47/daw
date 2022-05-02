@@ -25,7 +25,7 @@ Random node:
 -Extremely Randomized Node (k=1): https://link.springer.com/article/10.1007/s10994-006-6226-1
 
 Leaf node:
--Stores average label values for prediction.
+-Stores mean and median label values for prediction.
 """
 cdef struct Node:
 
@@ -51,8 +51,7 @@ cdef struct Node:
     # Leaf-specific properties
     SIZE_t   leaf_id                   # Leaf identifier
     bint     is_leaf                   # Whether this node is a leaf
-    DTYPE_t  value_mean                # Mean value, if leaf node
-    DTYPE_t  value_median              # Median value, if leaf node
+    DTYPE_t  value                     # Leaf value, either mean or median, if leaf node
     SIZE_t*  leaf_samples              # Array of sample indices if leaf
 
 """
@@ -105,7 +104,6 @@ cdef class _Tree:
 
     # Python API
     cpdef np.ndarray predict(self, float[:, :] X)
-    cpdef np.ndarray predict_median(self, float[:, :] X)
     cpdef np.ndarray apply(self, float[:, :] X)
     cpdef np.ndarray slack(self, float[:, :] X)
     cpdef SIZE_t get_structure_memory(self)

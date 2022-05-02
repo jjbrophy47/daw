@@ -46,7 +46,7 @@ cdef class _DataManager:
         cdef SIZE_t n_features = X_in.shape[1]
 
         cdef DTYPE_t** X = <DTYPE_t **>malloc(n_samples * sizeof(DTYPE_t *))
-        cdef INT32_t*  y = <DTYPE_t *>malloc(n_samples * sizeof(DTYPE_t))
+        cdef DTYPE_t*  y = <DTYPE_t *>malloc(n_samples * sizeof(DTYPE_t))
 
         cdef SIZE_t *vacant = NULL
 
