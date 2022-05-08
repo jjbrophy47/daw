@@ -70,21 +70,12 @@ cdef struct Feature:
 Struct to hold metadata pertaining to a particular feature threshold.
 """
 cdef struct Threshold:
-
-    # Greedy / Random node properties
-    DTYPE_t    value                 # Greedy node: midpoint of v1 and v2, Random node: value
-    SIZE_t     n_left_samples        # Number of samples for the left branch
-    SIZE_t     n_right_samples       # Number of samples for the right branch
-
-    # Greedy node properties
-    DTYPE_t    v1                    # Lower value of adjacent values
-    DTYPE_t    v2                    # Upper value of adjacent values
-    SIZE_t     n_v1_samples          # Number of samples for value 1
-    SIZE_t     n_v1_pos_samples      # Number of positive samples for value 1
-    SIZE_t     n_v2_samples          # Number of samples for value 2
-    SIZE_t     n_v2_pos_samples      # Number of positive samples for value 2
-    SIZE_t     n_left_pos_samples    # Number of positive samples for the left branch
-    SIZE_t     n_right_pos_samples   # Number of positive samples for the right branch
+    SIZE_t  feature               # Feature index
+    DTYPE_t value                 # Greedy node: midpoint of v1 and v2, Random node: value
+    SIZE_t  n_left_samples        # Number of samples for the left branch
+    SIZE_t  n_right_samples       # Number of samples for the right branch
+    SIZE_t  n_left_pos_samples    # Number of positive samples for the left branch
+    SIZE_t  n_right_pos_samples   # Number of positive samples for the right branch
 
 """
 Structure to hold a SIZE_t pointer and the no. elements.

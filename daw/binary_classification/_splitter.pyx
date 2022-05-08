@@ -196,7 +196,7 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
 
         # get candidate thresholds for this feature
         candidate_thresholds = <Threshold **>malloc(samples.n * sizeof(Threshold *))
-        n_candidate_thresholds = get_candidate_thresholds(values, labels, indices, samples.n,
+        n_candidate_thresholds = get_candidate_thresholds(feature_index, values, labels, indices, samples.n,
                                                           n_pos_samples, min_samples_leaf,
                                                           &candidate_thresholds)
 
@@ -248,12 +248,7 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
                 sampled_indices.n += 1
 
                 # compute split score
-                split_score = compute_split_score(use_gini,
-                                                  node.n_samples,
-                                                  threshold.n_left_samples,
-                                                  threshold.n_right_samples,
-                                                  threshold.n_left_pos_samples,
-                                                  threshold.n_right_pos_samples)
+                split_score = compute_split_score(use_gini, node.n_samples, threshold)
 
                 # save if its the best score
                 if split_score < best_score:
@@ -445,7 +440,7 @@ cdef SIZE_t select_random_threshold(Node*     node,
             # save node properties
             # printf('saving node\n')
             node.chosen_feature = create_feature(feature_index)
-            node.chosen_threshold = create_threshold(threshold_value, n_left_samples, n_right_samples)
+            node.chosen_threshold = create_threshold(feature_index, threshold_value, n_left_samples, n_right_samples)
             node.constant_features = copy_intlist(constant_features, constant_features.n)
 
             # free constant features
@@ -463,7 +458,8 @@ cdef SIZE_t select_random_threshold(Node*     node,
     return n_usable_thresholds
 
 
-cdef SIZE_t get_candidate_thresholds(DTYPE_t*     values,
+cdef SIZE_t get_candidate_thresholds(SIZE_t       feature,
+                                     DTYPE_t*     values,
                                      INT32_t*     labels,
                                      SIZE_t*      indices,
                                      SIZE_t       n_samples,
@@ -606,21 +602,9 @@ cdef SIZE_t get_candidate_thresholds(DTYPE_t*     values,
             (v1_label_ratio > 0.0 and v2_label_ratio < 1.0)):
 
             # create threshold
-            threshold = <Threshold *>malloc(sizeof(Threshold))
-            threshold.v1 = v1
-            threshold.v2 = v2
-            threshold.value = v1
-            threshold.n_v1_samples = n_v1_samples
-            threshold.n_v1_pos_samples = n_v1_pos_samples
-            threshold.n_v2_samples = n_v2_samples
-            threshold.n_v2_pos_samples = n_v2_pos_samples
-            threshold.n_left_samples = n_left_samples
+            threshold = create_threshold(feature, v1, n_left_samples, n_right_samples)
             threshold.n_left_pos_samples = n_left_pos_samples
-            threshold.n_right_samples = n_right_samples
             threshold.n_right_pos_samples = n_right_pos_samples
-
-            # printf('[S - GCT] v1: %.5f, v2: %.5f, v1 + v2: %.5f, threshold.value: %.5f\n',
-            #        v1, v2, v2 + v1, threshold.value)
 
             # save threshold to thresholds array
             thresholds[thresholds_count] = threshold

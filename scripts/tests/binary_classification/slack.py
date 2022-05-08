@@ -9,8 +9,8 @@ from sklearn.datasets import load_boston
 from sklearn.metrics import roc_auc_score
 
 here = os.path.abspath(os.path.dirname(__file__))
+sys.path.insert(0, here + '/../../../')
 sys.path.insert(0, here + '/../../')
-sys.path.insert(0, here + '/../')
 import daw
 from utility import data_util
 

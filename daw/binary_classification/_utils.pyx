@@ -75,33 +75,22 @@ cdef inline double rand_uniform(double low, double high,
 
 # SCORING METHODS
 
-cdef DTYPE_t compute_split_score(bint    use_gini,
-                                 DTYPE_t count,
-                                 DTYPE_t left_count,
-                                 DTYPE_t right_count,
-                                 SIZE_t  left_pos_count,
-                                 SIZE_t  right_pos_count) nogil:
+cdef DTYPE_t compute_split_score(bint       use_gini,
+                                 DTYPE_t    count,
+                                 Threshold* threshold) nogil:
     """
     Computes either the Gini index or entropy given this attribute.
     """
     cdef DTYPE_t result
-
     if use_gini:
-        result = compute_gini(count, left_count, right_count,
-                              left_pos_count, right_pos_count)
-
+        result = compute_gini(count, threshold)
     else:
-        result = compute_entropy(count, left_count, right_count,
-                                 left_pos_count, right_pos_count)
-
+        result = compute_entropy(count, threshold)
     return result
 
 
-cdef DTYPE_t compute_gini(DTYPE_t count,
-                          DTYPE_t left_count,
-                          DTYPE_t right_count,
-                          SIZE_t  left_pos_count,
-                          SIZE_t  right_pos_count) nogil:
+cdef DTYPE_t compute_gini(DTYPE_t    count,
+                          Threshold* threshold) nogil:
     """
     Compute the Gini index given this attribute.
     """
@@ -113,16 +102,16 @@ cdef DTYPE_t compute_gini(DTYPE_t count,
     cdef DTYPE_t left_weighted_index = 0
     cdef DTYPE_t right_weighted_index = 0
 
-    if left_count > 0:
-        weight = left_count / count
-        pos_prob = left_pos_count / left_count
+    if threshold.n_left_samples > 0:
+        weight = <DTYPE_t> threshold.n_left_samples / count
+        pos_prob = <DTYPE_t> threshold.n_left_pos_samples / threshold.n_left_samples
         neg_prob = 1 - pos_prob
         index = 1 - (pos_prob * pos_prob) - (neg_prob * neg_prob)
         left_weighted_index = weight * index
 
-    if right_count > 0:
-        weight = right_count / count
-        pos_prob = right_pos_count / right_count
+    if threshold.n_right_samples > 0:
+        weight = <DTYPE_t> threshold.n_right_samples / count
+        pos_prob = <DTYPE_t> threshold.n_right_pos_samples / threshold.n_right_samples
         neg_prob = 1 - pos_prob
         index = 1 - (pos_prob * pos_prob) - (neg_prob * neg_prob)
         right_weighted_index = weight * index
@@ -130,11 +119,8 @@ cdef DTYPE_t compute_gini(DTYPE_t count,
     return left_weighted_index + right_weighted_index
 
 
-cdef DTYPE_t compute_entropy(DTYPE_t count,
-                             DTYPE_t left_count,
-                             DTYPE_t right_count,
-                             SIZE_t  left_pos_count,
-                             SIZE_t  right_pos_count) nogil:
+cdef DTYPE_t compute_entropy(DTYPE_t    count,
+                             Threshold* threshold) nogil:
     """
     Compute the mutual information given this attribute.
     """
@@ -146,9 +132,9 @@ cdef DTYPE_t compute_entropy(DTYPE_t count,
     cdef DTYPE_t left_weighted_entropy = 0
     cdef DTYPE_t right_weighted_entropy = 0
 
-    if left_count > 0:
-        weight = left_count / count
-        pos_prob = left_pos_count / left_count
+    if threshold.n_left_samples > 0:
+        weight = <DTYPE_t> threshold.n_left_samples / count
+        pos_prob = <DTYPE_t> threshold.n_left_pos_samples / threshold.n_left_samples
         neg_prob = 1 - pos_prob
 
         entropy = 0
@@ -159,9 +145,9 @@ cdef DTYPE_t compute_entropy(DTYPE_t count,
 
         left_weighted_entropy = weight * entropy
 
-    if right_count > 0:
-        weight = right_count / count
-        pos_prob = right_pos_count / right_count
+    if threshold.n_right_samples > 0:
+        weight = <DTYPE_t> threshold.n_right_samples / count
+        pos_prob = <DTYPE_t> threshold.n_right_pos_samples / threshold.n_right_samples
         neg_prob = 1 - pos_prob
 
         entropy = 0
@@ -183,7 +169,7 @@ cdef SIZE_t compute_slack(Threshold* best_threshold,
                           SIZE_t     n,
                           bint       use_gini) nogil:
     """
-    Compute slack between the first and second best splits.
+    Compute INSERTION slack between the first and second best splits.
 
     Note: It is assumed `best_threshold` is a "better" split than `second_threshold`.
     """
@@ -224,20 +210,9 @@ cdef DTYPE_t compute_score_gap(Threshold* split1,
     Return
         DTYPE_t, score gap.
     """
-    cdef DTYPE_t g1 = compute_split_score(use_gini,
-                                          n,
-                                          split1.n_left_samples,
-                                          split1.n_right_samples,
-                                          split1.n_left_pos_samples,
-                                          split1.n_right_pos_samples)
-    cdef DTYPE_t g2 = compute_split_score(use_gini,
-                                          n,
-                                          split2.n_left_samples,
-                                          split2.n_right_samples,
-                                          split2.n_left_pos_samples,
-                                          split2.n_right_pos_samples)
+    cdef DTYPE_t g1 = compute_split_score(use_gini, n, split1)
+    cdef DTYPE_t g2 = compute_split_score(use_gini, n, split2)
     cdef DTYPE_t score_gap = g2 - g1
-
     return score_gap
 
 cdef DTYPE_t reduce_score_gap(Threshold* split1,
@@ -252,7 +227,7 @@ cdef DTYPE_t reduce_score_gap(Threshold* split1,
     """
     cdef DTYPE_t score_gap = 1000000
     cdef DTYPE_t temp_gap = -1
-    cdef SIZE_t best_case = -1
+    cdef SIZE_t  best_case = -1
 
     n += 1
 
@@ -304,53 +279,57 @@ cdef DTYPE_t reduce_score_gap(Threshold* split1,
     split2.n_right_samples -= 1
     split2.n_right_pos_samples -= 1
 
-    # Case 4: add 0 to split1 left branch and split2 right branch
-    split1.n_left_samples += 1
-    split2.n_right_samples += 1
-    temp_gap = compute_score_gap(split1, split2, n, use_gini)
-    if temp_gap < score_gap:
-        score_gap = temp_gap
-        best_case = 4
-    split1.n_left_samples -= 1
-    split2.n_right_samples -= 1
+    if (split1.feature != split2.feature) or (split1.value > split2.value):
 
-    # Case 5: add 1 to split1 left branch and split2 right branch
-    split1.n_left_samples += 1
-    split1.n_left_pos_samples += 1
-    split2.n_right_samples += 1
-    split2.n_right_pos_samples += 1
-    temp_gap = compute_score_gap(split1, split2, n, use_gini)
-    if temp_gap < score_gap:
-        score_gap = temp_gap
-        best_case = 5
-    split1.n_left_samples -= 1
-    split1.n_left_pos_samples -= 1
-    split2.n_right_samples -= 1
-    split2.n_right_pos_samples -= 1
+        # Case 4: add 0 to split1 left branch and split2 right branch
+        split1.n_left_samples += 1
+        split2.n_right_samples += 1
+        temp_gap = compute_score_gap(split1, split2, n, use_gini)
+        if temp_gap < score_gap:
+            score_gap = temp_gap
+            best_case = 4
+        split1.n_left_samples -= 1
+        split2.n_right_samples -= 1
 
-    # Case 6: add 0 to split1 right branch and split2 left branch
-    split1.n_right_samples += 1
-    split2.n_left_samples += 1
-    temp_gap = compute_score_gap(split1, split2, n, use_gini)
-    if temp_gap < score_gap:
-        score_gap = temp_gap
-        best_case = 6
-    split1.n_right_samples -= 1
-    split2.n_left_samples -= 1
+        # Case 5: add 1 to split1 left branch and split2 right branch
+        split1.n_left_samples += 1
+        split1.n_left_pos_samples += 1
+        split2.n_right_samples += 1
+        split2.n_right_pos_samples += 1
+        temp_gap = compute_score_gap(split1, split2, n, use_gini)
+        if temp_gap < score_gap:
+            score_gap = temp_gap
+            best_case = 5
+        split1.n_left_samples -= 1
+        split1.n_left_pos_samples -= 1
+        split2.n_right_samples -= 1
+        split2.n_right_pos_samples -= 1
 
-    # Case 7: add 1 to split1 right branch and split2 left branch
-    split1.n_right_samples += 1
-    split1.n_right_pos_samples += 1
-    split2.n_left_samples += 1
-    split2.n_left_pos_samples += 1
-    temp_gap = compute_score_gap(split1, split2, n, use_gini)
-    if temp_gap < score_gap:
-        score_gap = temp_gap
-        best_case = 7
-    split1.n_right_samples -= 1
-    split1.n_right_pos_samples -= 1
-    split2.n_left_samples -= 1
-    split2.n_left_pos_samples -= 1
+    if (split1.feature != split2.feature) or (split1.value < split2.value):
+
+        # Case 6: add 0 to split1 right branch and split2 left branch
+        split1.n_right_samples += 1
+        split2.n_left_samples += 1
+        temp_gap = compute_score_gap(split1, split2, n, use_gini)
+        if temp_gap < score_gap:
+            score_gap = temp_gap
+            best_case = 6
+        split1.n_right_samples -= 1
+        split2.n_left_samples -= 1
+
+        # Case 7: add 1 to split1 right branch and split2 left branch
+        split1.n_right_samples += 1
+        split1.n_right_pos_samples += 1
+        split2.n_left_samples += 1
+        split2.n_left_pos_samples += 1
+        temp_gap = compute_score_gap(split1, split2, n, use_gini)
+        if temp_gap < score_gap:
+            score_gap = temp_gap
+            best_case = 7
+        split1.n_right_samples -= 1
+        split1.n_right_pos_samples -= 1
+        split2.n_left_samples -= 1
+        split2.n_left_pos_samples -= 1
 
     # update splits based on the chosen operation
     if best_case == 0:
@@ -405,22 +384,18 @@ cdef Feature* create_feature(SIZE_t feature_index) nogil:
     return feature
 
 
-cdef Threshold* create_threshold(DTYPE_t value,
+cdef Threshold* create_threshold(SIZE_t  feature,
+                                 DTYPE_t value,
                                  SIZE_t  n_left_samples,
                                  SIZE_t  n_right_samples) nogil:
     """
     Allocate memory for a threshold object.
     """
     cdef Threshold* threshold = <Threshold *>malloc(sizeof(Threshold))
+    threshold.feature = feature
     threshold.value = value
     threshold.n_left_samples = n_left_samples
     threshold.n_right_samples = n_right_samples
-    threshold.v1 = 0
-    threshold.v2 = 0
-    threshold.n_v1_samples = 0
-    threshold.n_v1_pos_samples = 0
-    threshold.n_v2_samples = 0
-    threshold.n_v2_pos_samples = 0
     threshold.n_left_pos_samples = 0
     threshold.n_right_pos_samples = 0
     return threshold
@@ -462,13 +437,8 @@ cdef Threshold* copy_threshold(Threshold* threshold) nogil:
     Copies the contents of a threshold to a new threshold.
     """
     cdef Threshold* new_threshold = <Threshold *>malloc(sizeof(Threshold))
-    new_threshold.v1 = threshold.v1
-    new_threshold.v2 = threshold.v2
+    new_threshold.feature = threshold.feature
     new_threshold.value = threshold.value
-    new_threshold.n_v1_samples = threshold.n_v1_samples
-    new_threshold.n_v1_pos_samples = threshold.n_v1_pos_samples
-    new_threshold.n_v2_samples = threshold.n_v2_samples
-    new_threshold.n_v2_pos_samples = threshold.n_v2_pos_samples
     new_threshold.n_left_samples = threshold.n_left_samples
     new_threshold.n_left_pos_samples = threshold.n_left_pos_samples
     new_threshold.n_right_samples = threshold.n_right_samples

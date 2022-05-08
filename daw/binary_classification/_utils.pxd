@@ -30,24 +30,15 @@ cdef double rand_uniform(double    low,
                          UINT32_t* random_state) nogil
 
 # Split-scoring methods
-cdef DTYPE_t compute_split_score(bint    use_gini,
-                                 DTYPE_t count,
-                                 DTYPE_t left_count,
-                                 DTYPE_t right_count,
-                                 SIZE_t  left_pos_count,
-                                 SIZE_t  right_pos_count) nogil
+cdef DTYPE_t compute_split_score(bint       use_gini,
+                                 DTYPE_t    count,
+                                 Threshold* threshold) nogil
 
-cdef DTYPE_t compute_gini(DTYPE_t count,
-                          DTYPE_t left_count,
-                          DTYPE_t right_count,
-                          SIZE_t  left_pos_count,
-                          SIZE_t  right_pos_count) nogil
+cdef DTYPE_t compute_gini(DTYPE_t    count,
+                          Threshold* threshold) nogil
 
-cdef DTYPE_t compute_entropy(DTYPE_t count,
-                             DTYPE_t left_count,
-                             DTYPE_t right_count,
-                             SIZE_t  left_pos_count,
-                             SIZE_t  right_pos_count) nogil
+cdef DTYPE_t compute_entropy(DTYPE_t    count,
+                             Threshold* threshold) nogil
 
 # Slack methods
 cdef SIZE_t compute_slack(Threshold* best_threshold,
@@ -67,9 +58,10 @@ cdef DTYPE_t reduce_score_gap(Threshold* split1,
 
 # Feature / threshold methods
 cdef Feature* create_feature(SIZE_t feature_index) nogil
-cdef Threshold* create_threshold(DTYPE_t value,
-                                 SIZE_t n_left_samples,
-                                 SIZE_t n_right_samples) nogil
+cdef Threshold* create_threshold(SIZE_t  feature,
+                                 DTYPE_t value,
+                                 SIZE_t  n_left_samples,
+                                 SIZE_t  n_right_samples) nogil
 cdef Feature** copy_features(Feature** features,
                              SIZE_t n_features) nogil
 cdef Feature* copy_feature(Feature* feature) nogil

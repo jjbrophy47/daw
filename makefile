@@ -4,7 +4,7 @@ clean:
 
 build:
 	cd daw/binary_classification; python3 setup.py build_ext --inplace; cd ..
-	cd daw/regression; python3 setup.py build_ext --inplace; cd ..
+# 	cd daw/regression; python3 setup.py build_ext --inplace; cd ..
 
 get_deps:
 	pip3 install -r requirements.txt
