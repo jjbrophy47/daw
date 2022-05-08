@@ -40,22 +40,6 @@ cdef DTYPE_t compute_gini(DTYPE_t    count,
 cdef DTYPE_t compute_entropy(DTYPE_t    count,
                              Threshold* threshold) nogil
 
-# Slack methods
-cdef SIZE_t compute_slack(Threshold* best_threshold,
-                          Threshold* second_threshold,
-                          SIZE_t     n,
-                          bint       use_gini) nogil
-
-cdef DTYPE_t compute_score_gap(Threshold* split1,
-                               Threshold* split2,
-                               SIZE_t     n,
-                               bint       use_gini) nogil
-
-cdef DTYPE_t reduce_score_gap(Threshold* split1,
-                              Threshold* split2,
-                              SIZE_t     n,
-                              bint       use_gini) nogil
-
 # Feature / threshold methods
 cdef Feature* create_feature(SIZE_t feature_index) nogil
 cdef Threshold* create_threshold(SIZE_t  feature,

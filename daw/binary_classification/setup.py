@@ -33,6 +33,11 @@ def configuration(parent_package='daw', top_path=None):
                          include_dirs=[numpy.get_include()],
                          libraries=libraries,
                          extra_compile_args=["-O3"])
+    config.add_extension("_slack",
+                         sources=["_slack.pyx"],
+                         include_dirs=[numpy.get_include()],
+                         libraries=libraries,
+                         extra_compile_args=["-O3"])
     config.add_extension("_utils",
                          sources=["_utils.pyx"],
                          include_dirs=[numpy.get_include()],

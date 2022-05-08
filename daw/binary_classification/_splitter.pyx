@@ -8,6 +8,7 @@ from libc.stdlib cimport free
 from libc.stdlib cimport malloc
 from libc.stdlib cimport realloc
 from libc.stdio cimport printf
+from libc.math cimport fabs
 
 cimport cython
 
@@ -15,8 +16,8 @@ import numpy as np
 cimport numpy as np
 np.import_array()
 
+from ._slack cimport compute_slack
 from ._utils cimport compute_split_score
-from ._utils cimport compute_slack
 from ._utils cimport rand_uniform
 from ._utils cimport rand_int
 from ._utils cimport create_intlist
@@ -26,7 +27,6 @@ from ._utils cimport free_intlist
 from ._utils cimport copy_intlist
 from ._utils cimport copy_feature
 from ._utils cimport copy_threshold
-from libc.math cimport fabs
 from ._argsort cimport sort
 
 # constants
