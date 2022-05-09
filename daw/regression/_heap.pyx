@@ -34,6 +34,9 @@ cdef class _MinMaxHeap:
             return self.size
 
     def __cinit__(self, float[:] input_vals):
+        """
+        Constructor.
+        """
         self.min_heap = _MinHeap()
         self.max_heap = _MaxHeap()
         self.size = 0
@@ -112,7 +115,7 @@ cdef class _MinMaxHeap:
 
     cdef DTYPE_t _median(self) nogil:
         """
-        Return median of all values.
+        Return median.
         """
         cdef DTYPE_t result
 
