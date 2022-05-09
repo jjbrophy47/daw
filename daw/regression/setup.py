@@ -38,6 +38,11 @@ def configuration(parent_package='daw', top_path=None):
                          include_dirs=[numpy.get_include()],
                          libraries=libraries,
                          extra_compile_args=["-O3"])
+    config.add_extension("_heap",
+                         sources=["_heap.pyx"],
+                         include_dirs=[numpy.get_include()],
+                         libraries=libraries,
+                         extra_compile_args=["-O3"])
     config.add_extension("_argsort",
                          sources=["_argsort.pyx"],
                          include_dirs=[numpy.get_include()],

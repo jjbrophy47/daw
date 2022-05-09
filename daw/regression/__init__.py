@@ -1,5 +1,5 @@
 """
-DARE module.
+DAW module.
 """
 from ._classes import DecisionTreeRegressor
 from ._classes import RandomForestRegressor
