@@ -16,6 +16,7 @@ cdef class _MinMaxHeap:
     cdef _MinHeap min_heap
     cdef _MaxHeap max_heap
     cdef SIZE_t   size
+    cdef DTYPE_t  total
 
     # Python API
     cpdef void insert(self, float item)
@@ -25,6 +26,7 @@ cdef class _MinMaxHeap:
     cdef void _insert(self, DTYPE_t x) nogil
     cdef void _remove(self, DTYPE_t x) nogil
     cdef DTYPE_t _median(self) nogil
+    cdef DTYPE_t _mean(self) nogil
 
 
 cdef class _BaseHeap:

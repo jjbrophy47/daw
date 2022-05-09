@@ -29,6 +29,10 @@ cdef class _MinMaxHeap:
         def __get__(self):
             return self._median()
 
+    property mean:
+        def __get__(self):
+            return self._mean()
+
     property size:
         def __get__(self):
             return self.size
@@ -40,6 +44,7 @@ cdef class _MinMaxHeap:
         self.min_heap = _MinHeap()
         self.max_heap = _MaxHeap()
         self.size = 0
+        self.total = 0
 
         cdef SIZE_t n_samples = input_vals.shape[0]
         cdef SIZE_t i = 0
@@ -68,6 +73,7 @@ cdef class _MinMaxHeap:
         if self.size == 0:
             self.min_heap._insert(x)
             self.size += 1
+            self.total += x
             return
 
         if self.min_heap._size() > self.max_heap._size():
@@ -85,6 +91,7 @@ cdef class _MinMaxHeap:
                 self.min_heap._insert(item)
 
         self.size += 1
+        self.total += x
 
     cdef void _remove(self, DTYPE_t x) nogil:
         """
@@ -98,6 +105,7 @@ cdef class _MinMaxHeap:
             else:
                 self.max_heap._remove(x)
             self.size -= 1
+            self.total -= x
             return
 
         if x < self._median():
@@ -112,6 +120,7 @@ cdef class _MinMaxHeap:
                 self.min_heap._insert(item)
 
         self.size -= 1
+        self.total -= x
 
     cdef DTYPE_t _median(self) nogil:
         """
@@ -126,6 +135,12 @@ cdef class _MinMaxHeap:
         else:
             result = (self.min_heap._root() + self.max_heap._root()) / 2
         return result
+
+    cdef DTYPE_t _mean(self) nogil:
+        """
+        Return mean.
+        """
+        return self.total / self.size
 
 
 # =======================
@@ -455,6 +470,12 @@ cdef class _List:
         self.size = 0
         self.capacity = 10
         self.arr = <DTYPE_t *>malloc(self.capacity * sizeof(DTYPE_t))
+
+    def __dealloc__(self):
+        """
+        Destructor.
+        """
+        free(self.arr)
 
     def __str__(self):
         """

@@ -176,6 +176,7 @@ def test_min_max_heap_initialize():
 
     heap = MinMaxHeap(input_list=data_list)
     assert heap.median == median(data_list)
+    assert heap.mean == mean(data_list)
 
     print('test_min_max_heap_initialize: passed')
 
@@ -191,6 +192,7 @@ def test_min_max_heap_insert():
         temp_list.append(item)
         assert heap.size == len(temp_list)
         assert heap.median == median(temp_list)
+        assert heap.mean == mean(temp_list)
 
     print('test_max_heap_insert: passed')
 
@@ -207,6 +209,7 @@ def test_min_max_heap_remove():
         temp_list.remove(item)
         assert heap.size == len(temp_list)
         assert heap.median == median(temp_list)
+        assert heap.mean == mean(temp_list)
 
     print('test_min_max_heap_remove: passed')
 
@@ -226,6 +229,7 @@ def test_min_max_heap_insert_remove():
         temp_list.append(insert_item)
         assert heap.size == len(temp_list)
         assert heap.median == median(temp_list)
+        assert heap.mean == mean(temp_list)
 
     print('test_min_max_heap_insert_remove: passed')
 
