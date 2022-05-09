@@ -14,6 +14,118 @@ cimport cython
 
 
 # =======================
+# Streaming median
+# =======================
+
+
+cdef class _MinMaxHeap:
+    """
+    Streaming median data structure consisting of
+    a _MinHeap and a _MaxHeap.
+    """
+
+    # Public Python API
+    property median:
+        def __get__(self):
+            return self._median()
+
+    property size:
+        def __get__(self):
+            return self.size
+
+    def __cinit__(self, float[:] input_vals):
+        self.min_heap = _MinHeap()
+        self.max_heap = _MaxHeap()
+        self.size = 0
+
+        cdef SIZE_t n_samples = input_vals.shape[0]
+        cdef SIZE_t i = 0
+
+        for i in range(n_samples):
+            self._insert(input_vals[i])
+
+    def __str__(self):
+        out_str = f'MinHeap:\n{self.min_heap.__str__()}'
+        out_str += f'\nMaxHeap:\n{self.max_heap.__str__()}'
+        return out_str
+
+    cpdef void insert(self, float item):
+        self._insert(<DTYPE_t>item)
+
+    cpdef void remove(self, float item):
+        self._remove(<DTYPE_t>item)
+
+    # Public C API
+    cdef void _insert(self, DTYPE_t x) nogil:
+        """
+        Insert x into either the min or max heap.
+        """
+        cdef DTYPE_t item
+
+        if self.size == 0:
+            self.min_heap._insert(x)
+            self.size += 1
+            return
+
+        if self.min_heap._size() > self.max_heap._size():
+            if x < self.min_heap._root():
+                self.max_heap._insert(x)
+            else:
+                item = self.min_heap._insertpop(x)
+                self.max_heap._insert(item)
+
+        else:
+            if x > self.min_heap._root():
+                self.min_heap._insert(x)
+            else:
+                item = self.max_heap._insertpop(x)
+                self.min_heap._insert(item)
+
+        self.size += 1
+
+    cdef void _remove(self, DTYPE_t x) nogil:
+        """
+        Remove x from either the min or max heap.
+        """
+        cdef DTYPE_t item
+
+        if self.size == 1:
+            if self.min_heap._size() == 1:
+                self.min_heap._remove(x)
+            else:
+                self.max_heap._remove(x)
+            self.size -= 1
+            return
+
+        if x < self._median():
+            self.max_heap._remove(x)  # raises IndexError if not in heap
+            if self.min_heap._size() - self.max_heap._size() > 1:
+                item = self.min_heap._pop()
+                self.max_heap._insert(item)
+        else:
+            self.min_heap._remove(x)  # raises IndexError if not in heap
+            if self.max_heap._size() - self.min_heap._size() > 1:
+                item = self.max_heap._pop()
+                self.min_heap._insert(item)
+
+        self.size -= 1
+
+    cdef DTYPE_t _median(self) nogil:
+        """
+        Return median of all values.
+        """
+        cdef DTYPE_t result
+
+        if self.min_heap._size() > self.max_heap._size():
+            result = self.min_heap._root()
+        elif self.min_heap._size() < self.max_heap._size():
+            result = self.max_heap._root()
+        else:
+            result = (self.min_heap._root() + self.max_heap._root()) / 2
+        return result
+
+
+# =======================
 # Heap
 # =======================
 
@@ -26,13 +138,11 @@ cdef class _BaseHeap:
     # Public Python API
     property size:
         def __get__(self):
-            return self.heap.size
+            return self._size()
 
     property root:
         def __get__(self):
-            if self.heap.size == 0:
-                raise IndexError('Empty heap!')
-            return self.heap.arr[0]
+            return self._root()
 
     # Public C API
     def __cinit__(self):
@@ -101,6 +211,20 @@ cdef class _BaseHeap:
         if pos < self.heap.size:
             self._siftup(pos)
             self._siftdown(0, pos)
+
+    cdef SIZE_t _size(self) nogil:
+        """
+        Get heap size.
+        """
+        return self.heap.size
+
+    cdef DTYPE_t _root(self) nogil:
+        """
+        Get root value.
+        """
+        if self.heap.size == 0:
+            raise IndexError('Empty heap!')
+        return self.heap.arr[0]
 
     # private
     cdef SIZE_t _parent_pos(self, SIZE_t pos) nogil:

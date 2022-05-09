@@ -7,6 +7,26 @@ from ._utils cimport INT32_t
 from ._utils cimport UINT32_t
 
 
+cdef class _MinMaxHeap:
+    """
+    Streaming median implementation using a min and a max heap.
+    """
+
+    # Inner structures
+    cdef _MinHeap min_heap
+    cdef _MaxHeap max_heap
+    cdef SIZE_t   size
+
+    # Python API
+    cpdef void insert(self, float item)
+    cpdef void remove(self, float item)
+
+    # C API
+    cdef void _insert(self, DTYPE_t x) nogil
+    cdef void _remove(self, DTYPE_t x) nogil
+    cdef DTYPE_t _median(self) nogil
+
+
 cdef class _BaseHeap:
     """
     Abstract Heap class.
@@ -26,6 +46,8 @@ cdef class _BaseHeap:
     cdef DTYPE_t _pop(self) nogil
     cdef DTYPE_t _insertpop(self, DTYPE_t item) nogil  # ABSTRACT
     cdef void _remove(self, DTYPE_t item) nogil
+    cdef SIZE_t _size(self) nogil
+    cdef DTYPE_t _root(self) nogil
 
     # private
     cdef SIZE_t _parent_pos(self, SIZE_t pos) nogil
@@ -44,7 +66,6 @@ cdef class _MinHeap(_BaseHeap):
 
     # C API
     cdef DTYPE_t _insertpop(self, DTYPE_t item) nogil
-    # cdef void _heapify(self) nogil
 
     # private
     cdef void _siftdown(self, SIZE_t start_pos, SIZE_t pos) nogil
@@ -58,7 +79,6 @@ cdef class _MaxHeap(_BaseHeap):
 
     # C API
     cdef DTYPE_t _insertpop(self, DTYPE_t item) nogil
-    # cdef void _heapify(self) nogil
 
     # private
     cdef void _siftdown(self, SIZE_t start_pos, SIZE_t pos) nogil

@@ -9,7 +9,7 @@ import numpy as np
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../../../')
-from daw.regression._heap import _MinHeap, _MaxHeap
+from daw.regression._heap import _MinHeap, _MaxHeap, _MinMaxHeap
 
 
 def get_data():
@@ -169,7 +169,7 @@ def test_max_heap_remove():
 def test_min_max_heap_initialize():
     data_list = get_data()
 
-    heap = MinMaxHeap(input_list=data_list)
+    heap = _MinMaxHeap(data_list)
     assert heap.median == median(data_list)
 
     print('test_min_max_heap_initialize: passed')
@@ -177,8 +177,9 @@ def test_min_max_heap_initialize():
 
 def test_min_max_heap_insert():
     data_list = get_data()
+    empty_list = get_empty_data()
 
-    heap = MinMaxHeap(input_list=[])
+    heap = _MinMaxHeap(empty_list)
     temp_list = []
 
     for i, item in enumerate(data_list):
@@ -187,14 +188,14 @@ def test_min_max_heap_insert():
         assert heap.size == len(temp_list)
         assert heap.median == median(temp_list)
 
-    print('test_max_heap_insert: passed')
+    print('test_min_max_heap_insert: passed')
 
 
 def test_min_max_heap_remove():
     data_list = get_data()
 
-    heap = MinMaxHeap(input_list=data_list)
-    temp_list = data_list.copy()
+    heap = _MinMaxHeap(data_list)
+    temp_list = list(data_list)
 
     for i in range(len(data_list) - 1):
         item = data_list[i]
@@ -206,11 +207,11 @@ def test_min_max_heap_remove():
     print('test_min_max_heap_remove: passed')
 
 
-def test_min_max_heap_insert_remove():
+def test_min_max_heap_insert_and_remove():
     data_list = get_data()
 
-    heap = MinMaxHeap(input_list=data_list)
-    temp_list = data_list.copy()
+    heap = _MinMaxHeap(data_list)
+    temp_list = list(data_list)
 
     for i in range(len(data_list)):
         remove_item = data_list[i]
@@ -222,7 +223,7 @@ def test_min_max_heap_insert_remove():
         assert heap.size == len(temp_list)
         assert heap.median == median(temp_list)
 
-    print('test_min_max_heap_insert_remove: passed')
+    print('test_min_max_heap_insert_and_remove: passed')
 
 
 # Driver Code
@@ -235,7 +236,7 @@ if __name__ == "__main__":
     test_max_heap_pop()
     test_max_heap_insertpop()
     test_max_heap_remove()
-    # test_min_max_heap_initialize()
-    # test_min_max_heap_insert()
-    # test_min_max_heap_remove()
-    # test_min_max_heap_insert_remove()
+    test_min_max_heap_initialize()
+    test_min_max_heap_insert()
+    test_min_max_heap_remove()
+    test_min_max_heap_insert_and_remove()
