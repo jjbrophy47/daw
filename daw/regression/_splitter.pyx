@@ -15,8 +15,8 @@ import numpy as np
 cimport numpy as np
 np.import_array()
 
+from ._slack cimport compute_slack
 from ._utils cimport compute_split_score
-# from ._utils cimport compute_slack
 from ._utils cimport rand_uniform
 from ._utils cimport rand_int
 from ._utils cimport create_intlist
@@ -26,7 +26,6 @@ from ._utils cimport free_intlist
 from ._utils cimport copy_intlist
 from ._utils cimport copy_feature
 from ._utils cimport copy_threshold
-from libc.math cimport fabs
 from ._argsort cimport sort
 
 # constants
@@ -195,8 +194,8 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
 
         # get candidate thresholds for this feature
         candidate_thresholds = <Threshold **>malloc(samples.n * sizeof(Threshold *))
-        n_candidate_thresholds = get_candidate_thresholds(values, labels, indices, samples.n,
-                                                          min_samples_leaf, &candidate_thresholds)
+        n_candidate_thresholds = get_candidate_thresholds(feature_index, values, labels, indices,
+            samples.n, min_samples_leaf, &candidate_thresholds)
 
         # no valid thresholds, candidate thresholds is freed in the method
         if n_candidate_thresholds == 0:
@@ -249,18 +248,7 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
                 #     feature.index, threshold.value, criterion)
 
                 # compute split score
-                split_score = compute_split_score(X,
-                                                  y,
-                                                  samples,
-                                                  feature.index,
-                                                  threshold.value,
-                                                  criterion)
-
-                # split_score = compute_split_score(node.n_samples,
-                #                                   threshold.n_left_samples,
-                #                                   threshold.n_right_samples,
-                #                                   threshold.n_left_pos_samples,
-                #                                   threshold.n_right_pos_samples)
+                split_score = compute_split_score(X, y, samples, threshold, criterion)
 
                 # save if its the best score
                 if split_score < best_score:
@@ -273,15 +261,6 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
                     # save best split
                     chosen_feature = feature
                     chosen_threshold = threshold
-
-                    # printf('[S - SGT] score: %.5f\n', best_score)
-                    # printf('[S - SGT] chosen_feature.index: %ld, chosen_threshold.value: %.5f\n',
-                    #        chosen_feature.index, chosen_threshold.value)
-                    # if second_best_feature != NULL and second_best_threshold != NULL:
-                    #     printf('[S - SGT] second_best_feature.index: %ld, second_best_threshold.value: %.5f\n',
-                    #            second_best_feature.index, second_best_threshold.value)
-                    # printf('[S - SGT] threshold.n_left_samples: %ld, threshold.n_right_samples: %ld\n',
-                    #        threshold.n_left_samples, threshold.n_right_samples)
 
         # printf('[S - SGT] n_candidate_thresholds_to_sample: %ld\n', n_candidate_thresholds_to_sample)
 
@@ -317,7 +296,7 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
         node.constant_features = copy_intlist(constant_features, constant_features.n)
         node.chosen_feature = copy_feature(chosen_feature)
         node.chosen_threshold = copy_threshold(chosen_threshold)
-        # node.slack = compute_slack(chosen_threshold, second_best_threshold, samples.n)
+        node.slack = compute_slack(X, y, samples, chosen_threshold, second_best_threshold, criterion)
 
     # free features array
     else:
@@ -452,7 +431,7 @@ cdef SIZE_t select_random_threshold(Node*     node,
             # save node properties
             # printf('saving node\n')
             node.chosen_feature = create_feature(feature_index)
-            node.chosen_threshold = create_threshold(threshold_value, n_left_samples, n_right_samples)
+            node.chosen_threshold = create_threshold(feature_index, threshold_value)
             node.constant_features = copy_intlist(constant_features, constant_features.n)
 
             # free constant features
@@ -470,7 +449,8 @@ cdef SIZE_t select_random_threshold(Node*     node,
     return n_usable_thresholds
 
 
-cdef SIZE_t get_candidate_thresholds(DTYPE_t*     values,
+cdef SIZE_t get_candidate_thresholds(SIZE_t       feature,
+                                     DTYPE_t*     values,
                                      DTYPE_t*     labels,
                                      SIZE_t*      indices,
                                      SIZE_t       n_samples,
@@ -565,8 +545,6 @@ cdef SIZE_t get_candidate_thresholds(DTYPE_t*     values,
         # extract both of the feature set counts
         v1 = threshold_values[k-1]
         v2 = threshold_values[k]
-        n_v1_samples = v_counts[k-1]
-        n_v2_samples = v_counts[k]
         n_left_samples = counts[k-1]
         n_right_samples = n_samples - n_left_samples
 
@@ -580,16 +558,8 @@ cdef SIZE_t get_candidate_thresholds(DTYPE_t*     values,
         # create threshold
         else:
             threshold = <Threshold *>malloc(sizeof(Threshold))
-            threshold.v1 = v1
-            threshold.v2 = v2
+            threshold.feature = feature
             threshold.value = v1
-            threshold.n_v1_samples = n_v1_samples
-            threshold.n_v2_samples = n_v2_samples
-            threshold.n_left_samples = n_left_samples
-            threshold.n_right_samples = n_right_samples
-
-            # printf('[S - GCT] v1: %.5f, v2: %.5f, v1 + v2: %.5f, threshold.value: %.5f\n',
-            #        v1, v2, v2 + v1, threshold.value)
 
             # save threshold to thresholds array
             thresholds[thresholds_count] = threshold

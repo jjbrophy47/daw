@@ -48,7 +48,8 @@ cdef SIZE_t select_random_threshold(Node*     node,
                                     SIZE_t    n_total_features,
                                     _Config   config) nogil
 
-cdef SIZE_t get_candidate_thresholds(DTYPE_t*     values,
+cdef SIZE_t get_candidate_thresholds(SIZE_t       feature,
+                                     DTYPE_t*     values,
                                      DTYPE_t*     labels,
                                      SIZE_t*      indices,
                                      SIZE_t       n_samples,

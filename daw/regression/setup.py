@@ -13,41 +13,46 @@ def configuration(parent_package='daw', top_path=None):
     if os.name == 'posix':
         libraries.append('m')
 
-    config.add_extension("_config",
-                         sources=["_config.pyx"],
-                         include_dirs=[numpy.get_include()],
-                         libraries=libraries,
-                         extra_compile_args=["-O3"])
-    config.add_extension("_manager",
-                         sources=["_manager.pyx"],
-                         include_dirs=[numpy.get_include()],
-                         libraries=libraries,
-                         extra_compile_args=["-O3"])
-    config.add_extension("_tree",
-                         sources=["_tree.pyx"],
-                         include_dirs=[numpy.get_include()],
-                         libraries=libraries,
-                         extra_compile_args=["-O3"])
-    config.add_extension("_splitter",
-                         sources=["_splitter.pyx"],
-                         include_dirs=[numpy.get_include()],
-                         libraries=libraries,
-                         extra_compile_args=["-O3"])
-    config.add_extension("_utils",
-                         sources=["_utils.pyx"],
-                         include_dirs=[numpy.get_include()],
-                         libraries=libraries,
-                         extra_compile_args=["-O3"])
+    # config.add_extension("_config",
+    #                      sources=["_config.pyx"],
+    #                      include_dirs=[numpy.get_include()],
+    #                      libraries=libraries,
+    #                      extra_compile_args=["-O3"])
+    # config.add_extension("_manager",
+    #                      sources=["_manager.pyx"],
+    #                      include_dirs=[numpy.get_include()],
+    #                      libraries=libraries,
+    #                      extra_compile_args=["-O3"])
+    # config.add_extension("_tree",
+    #                      sources=["_tree.pyx"],
+    #                      include_dirs=[numpy.get_include()],
+    #                      libraries=libraries,
+    #                      extra_compile_args=["-O3"])
+    # config.add_extension("_splitter",
+    #                      sources=["_splitter.pyx"],
+    #                      include_dirs=[numpy.get_include()],
+    #                      libraries=libraries,
+    #                      extra_compile_args=["-O3"])
+    # config.add_extension("_slack",
+    #                      sources=["_slack.pyx"],
+    #                      include_dirs=[numpy.get_include()],
+    #                      libraries=libraries,
+    #                      extra_compile_args=["-O3"])
+    # config.add_extension("_utils",
+    #                      sources=["_utils.pyx"],
+    #                      include_dirs=[numpy.get_include()],
+    #                      libraries=libraries,
+    #                      extra_compile_args=["-O3"])
     config.add_extension("_heap",
                          sources=["_heap.pyx"],
                          include_dirs=[numpy.get_include()],
                          libraries=libraries,
                          extra_compile_args=["-O3"])
-    config.add_extension("_argsort",
-                         sources=["_argsort.pyx"],
-                         include_dirs=[numpy.get_include()],
-                         libraries=libraries,
-                         extra_compile_args=["-O3"])
+    # config.add_extension("_argsort",
+    #                      sources=["_argsort.pyx"],
+    #                      include_dirs=[numpy.get_include()],
+    #                      libraries=libraries,
+    #                      extra_compile_args=["-O3"])
 
     config.ext_modules = cythonize(
         config.ext_modules,
