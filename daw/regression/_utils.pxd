@@ -11,7 +11,7 @@ from ._tree cimport Threshold
 from ._tree cimport Feature
 from ._tree cimport IntList
 from ._splitter cimport SplitRecord
-from ._heap cimport _MinMaxHeap
+from ._heap cimport MinMaxHeap
 
 cdef enum:
     # Max value for our rand_r replacement (near the bottom).
@@ -33,10 +33,13 @@ cdef DTYPE_t compute_split_score(DTYPE_t**  X,
                                  DTYPE_t*   y,
                                  IntList*   samples,
                                  Threshold* threshold,
-                                 SIZE_t     criterion)
-cdef DTYPE_t _compute_split_score(_MinMaxHeap left,
-                                  _MinMaxHeap right,
+                                 SIZE_t     criterion) nogil
+cdef DTYPE_t _compute_split_score(MinMaxHeap* left,
+                                  MinMaxHeap* right,
                                   SIZE_t      criterion) nogil
+cdef DTYPE_t compute_leaf_value(IntList* samples,
+                                DTYPE_t* y,
+                                SIZE_t   criterion) nogil
 
 # Feature / threshold methods
 cdef Feature* create_feature(SIZE_t feature_index) nogil
@@ -76,8 +79,8 @@ cdef SIZE_t split_labels(DTYPE_t**  X,
                          DTYPE_t*   y,
                          IntList*   samples,
                          Threshold* threshold,
-                         DTYPE_t*   y_left,
-                         DTYPE_t*   y_right) nogil
+                         DTYPE_t**  y_left,
+                         DTYPE_t**  y_right) nogil
 cdef void split_samples(Node*        node,
                         DTYPE_t**    X,
                         DTYPE_t*     y,

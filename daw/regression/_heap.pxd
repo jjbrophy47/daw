@@ -36,6 +36,8 @@ cdef void mmh_insert(MinMaxHeap* mmh, DTYPE_t x) nogil
 cdef void mmh_remove(MinMaxHeap* mmh, DTYPE_t x) nogil
 cdef DTYPE_t mmh_median(MinMaxHeap* mmh) nogil
 cdef DTYPE_t mmh_mean(MinMaxHeap* mmh) nogil
+cdef DTYPE_t mmh_min(MinMaxHeap* mmh) nogil
+cdef DTYPE_t mmh_max(MinMaxHeap* mmh) nogil
 
 # =======================
 # Heap methods
@@ -92,6 +94,7 @@ cdef void list_free(List* my_list) nogil
 cdef void list_append(List* my_list, DTYPE_t x) nogil
 cdef DTYPE_t list_pop(List* my_list) nogil
 cdef SIZE_t list_index(List* my_list, DTYPE_t item) nogil
+cdef void list_print(List* my_list) nogil
 
 # private C API
 cdef void _list_increase_capacity(List* my_list) nogil

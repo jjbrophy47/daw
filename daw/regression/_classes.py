@@ -198,28 +198,28 @@ class RandomForestRegressor(object):
 
         return leaves
 
-    # def slack(self, X):
-    #     """
-    #     Predict root-to-leaf slack, that is, the minimum number of examples
-    #     that cause retraining when ADDED to a given decision node.
+    def slack(self, X):
+        """
+        Predict root-to-leaf slack, that is, the minimum number of examples
+        that cause retraining when ADDED to a given decision node.
 
-    #     Input
-    #         X: np.ndarray, 2d array of input data.
+        Input
+            X: np.ndarray, 2d array of input data.
 
-    #     Return
-    #         dict
-    #             key: tree_idx,
-    #             value: 2d array of root-to-leaf slack; shape=(len(X), total no. nodes in tree).
-    #     """
-    #     assert X.ndim == 2
-    #     X = check_data(X)
+        Return
+            dict
+                key: tree_idx,
+                value: 2d array of root-to-leaf slack; shape=(len(X), total no. nodes in tree).
+        """
+        assert X.ndim == 2
+        X = check_data(X)
 
-    #     result = {}
+        result = {}
 
-    #     for i, tree in enumerate(self.trees_):
-    #         result[i] = tree.slack(X)  # shape=(len(X), total no. nodes in tree)
+        for i, tree in enumerate(self.trees_):
+            result[i] = tree.slack(X)  # shape=(len(X), total no. nodes in tree)
 
-    #     return result
+        return result
 
     def get_node_statistics(self):
         """
@@ -433,21 +433,21 @@ class DecisionTreeRegressor(object):
         leaves = self.tree_.apply(X)
         return leaves
 
-    # def slack(self, X):
-    #     """
-    #     Predict root-to-leaf slack: minimum number of examples needed to cause
-    #     retraining when ADDING to a specific decision node.
+    def slack(self, X):
+        """
+        Predict root-to-leaf slack: minimum number of examples needed to cause
+        retraining when ADDING to a specific decision node.
 
-    #     Input
-    #         X: np.ndarray, 2d array of input data.
+        Input
+            X: np.ndarray, 2d array of input data.
 
-    #     Return
-    #         np.ndarray, 2d array of root-to-leaf slack; shape=(len(X), total no. nodes in tree).
-    #     """
-    #     assert X.ndim == 2
-    #     X = check_data(X)
-    #     slack_values = self.tree_.slack(X)
-    #     return slack_values
+        Return
+            np.ndarray, 2d array of root-to-leaf slack; shape=(len(X), total no. nodes in tree).
+        """
+        assert X.ndim == 2
+        X = check_data(X)
+        slack_values = self.tree_.slack(X)
+        return slack_values
 
     def get_node_statistics(self):
         """

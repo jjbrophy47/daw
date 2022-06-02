@@ -24,8 +24,11 @@ import numpy as np
 cimport numpy as np
 np.import_array()
 
+from ._heap cimport mmh_free
+from ._heap cimport mmh_create
+from ._heap cimport mmh_median
+from ._heap cimport mmh_mean
 from ._argsort cimport sort
-
 from ._tree cimport UNDEF
 from ._tree cimport UNDEF_LEAF_VAL
 
@@ -85,21 +88,17 @@ cdef DTYPE_t compute_split_score(DTYPE_t**  X,
                                  DTYPE_t*   y,
                                  IntList*   samples,
                                  Threshold* threshold,
-                                 SIZE_t     criterion):
+                                 SIZE_t     criterion) nogil:
     """
     Compute total error reduction for the given split.
     """
-    
-    cdef DTYPE_t* y_left = NULL  # must free
-    cdef DTYPE_t* y_right = NULL  # must free
-    cdef SIZE_t n_left = split_labels(X, y, samples, threshold, y_left, y_right)
+    cdef DTYPE_t* y_left = <DTYPE_t *>malloc(samples.n * sizeof(DTYPE_t))  # must free
+    cdef DTYPE_t* y_right = <DTYPE_t *>malloc(samples.n * sizeof(DTYPE_t))  # must free
+    cdef SIZE_t n_left = split_labels(X, y, samples, threshold, &y_left, &y_right)
     cdef SIZE_t n_right = samples.n - n_left
 
-    cdef _MinMaxHeap left = _MinMaxHeap()  # TODO: free?
-    cdef _MinMaxHeap right = _MinMaxHeap()
-
-    left._insert_list(y_left, n_left)
-    right._insert_list(y_right, n_right)
+    cdef MinMaxHeap* left = mmh_create(y_left, n_left)  # must free
+    cdef MinMaxHeap* right = mmh_create(y_right, n_right)  # must free
 
     cdef DTYPE_t result = _compute_split_score(left, right, criterion)
 
@@ -107,12 +106,15 @@ cdef DTYPE_t compute_split_score(DTYPE_t**  X,
     free(y_left)
     free(y_right)
 
+    mmh_free(left)
+    mmh_free(right)
+
     return result
 
 
 # private
-cdef DTYPE_t _compute_split_score(_MinMaxHeap left,
-                                  _MinMaxHeap right,
+cdef DTYPE_t _compute_split_score(MinMaxHeap* left,
+                                  MinMaxHeap* right,
                                   SIZE_t      criterion) nogil:
     """
     Computes purity of the leaf via mean-squared error or median absolute error.
@@ -130,7 +132,7 @@ cdef DTYPE_t _compute_split_score(_MinMaxHeap left,
 
     cdef DTYPE_t total = left.size + right.size
     cdef DTYPE_t left_weight = <DTYPE_t> left.size / total
-    cdef DTYPE_t right_weight = <DTYPE_t> left.size / total
+    cdef DTYPE_t right_weight = <DTYPE_t> right.size / total
 
     cdef DTYPE_t left_val
     cdef DTYPE_t right_val
@@ -143,53 +145,58 @@ cdef DTYPE_t _compute_split_score(_MinMaxHeap left,
 
     # median absolute error
     if criterion == 0:
-        left_val = left.median
-        right_val = right.median
+        left_val = mmh_median(left)
+        right_val = mmh_median(right)
 
         # compute left branch errors
         k = 0
         for i in range(left.min_heap.size):
-            left_errors[k] = fabs(left.min_heap.heap.arr[i] - left_val)
+            left_errors[k] = fabs(left.min_heap.arr[i] - left_val)
+            # printf('%.5f, %.5f, %.5f\n', left_val, left.min_heap.arr[i], left_errors[k])
             k += 1
         for i in range(left.max_heap.size):
-            left_errors[k] = fabs(left.max_heap.heap.arr[i] - left_val)
+            left_errors[k] = fabs(left.max_heap.arr[i] - left_val)
+            # printf('%.5f, %.5f, %.5f\n', left_val, left.min_heap.arr[i], left_errors[k])
             k += 1
 
         # compute right branch errors
         k = 0
         for i in range(right.min_heap.size):
-            right_errors[k] = fabs(right.min_heap.heap.arr[i] - right_val)
+            right_errors[k] = fabs(right.min_heap.arr[i] - right_val)
+            # printf('%.5f, %.5f, %.5f\n', right_val, right.min_heap.arr[i], right_errors[k])
             k += 1
         for i in range(right.max_heap.size):
-            right_errors[k] = fabs(right.max_heap.heap.arr[i] - right_val)
+            right_errors[k] = fabs(right.max_heap.arr[i] - right_val)
+            # printf('%.5f, %.5f, %.5f\n', right_val, right.max_heap.arr[i], right_errors[k])
             k += 1
 
+        # printf('%ld, %ld\n', left.size, right.size)
         left_score = compute_median(left_errors, left.size)
         right_score = compute_median(right_errors, right.size)
 
     # mean squared error
     elif criterion == 1:
-        left_val = left.mean
-        right_val = right.mean
+        left_val = mmh_mean(left)
+        right_val = mmh_mean(right)
 
         # compute left branch errors
         k = 0
 
         for i in range(left.min_heap.size):
-            left_errors[k] = pow(left.min_heap.heap.arr[i] - left_val, 2)
+            left_errors[k] = pow(left.min_heap.arr[i] - left_val, 2)
             k += 1
         for i in range(left.max_heap.size):
-            left_errors[k] = pow(left.max_heap.heap.arr[i] - left_val, 2)
+            left_errors[k] = pow(left.max_heap.arr[i] - left_val, 2)
             k += 1
 
         # compute right branch errors
         k = 0
 
         for i in range(right.min_heap.size):
-            right_errors[k] = pow(right.min_heap.heap.arr[i] - right_val, 2)
+            right_errors[k] = pow(right.min_heap.arr[i] - right_val, 2)
             k += 1
         for i in range(right.max_heap.size):
-            right_errors[k] = pow(right.max_heap.heap.arr[i] - right_val, 2)
+            right_errors[k] = pow(right.max_heap.arr[i] - right_val, 2)
             k += 1
 
         left_score = compute_mean(left_errors, left.size)
@@ -201,7 +208,37 @@ cdef DTYPE_t _compute_split_score(_MinMaxHeap left,
     free(left_errors)
     free(right_errors)
 
+    # printf('[U - CSS] left_weight: %.5f, left_score: %.5f, right_weight: %.5f, right_score: %.5f\n',
+    #     left_weight, left_score, right_weight, right_score)
+
     return (left_weight * left_score) + (right_weight * right_score)
+
+
+cdef DTYPE_t compute_leaf_value(IntList* samples,
+                                DTYPE_t* y,
+                                SIZE_t   criterion) nogil:
+    """
+    Compute leaf value depending on the criterion.
+    """
+    cdef DTYPE_t* values = <DTYPE_t *>malloc(samples.n * sizeof(DTYPE_t))  # must free
+
+    cdef DTYPE_t result
+    cdef SIZE_t i = 0
+
+    for i in range(samples.n):
+        values[i] = y[samples.arr[i]]
+
+    if criterion == 0:  # absolute error
+        result = compute_median(values, samples.n)
+    elif criterion == 1:
+        result = compute_mean(values, samples.n)
+    else:
+        raise ValueError('Unknown criterion %ld\n', criterion)
+
+    # clean up
+    free(values)
+
+    return result
 
 
 # FEATURE / THRESHOLD METHODS
@@ -444,23 +481,16 @@ cdef DTYPE_t compute_median(DTYPE_t* vals, SIZE_t n) nogil:
     for i in range(n):
         sorted_vals[i] = vals[i]
 
-    # printf('[U - CM] sort values...\n')
-
     # sort label values and indices based on the label values
-    sort(sorted_vals, NULL, n)  # TODO: can you put NULL here?
-
-    # for j in range(n):
-    #     printf('[U - CM] sorted_vals[%ld]: %.5f\n', j, sorted_vals[j])
+    sort(sorted_vals, NULL, n)
 
     # extract median
     if n % 2 == 1:  # odd
-        i = <SIZE_t> ceil(n / 2.0)
+        i = n // 2
         result = sorted_vals[i]
     else:  # even
         i = n / 2
         result = (sorted_vals[i-1] + sorted_vals[i]) / 2.0
-
-    # printf('[U - CM] median value: %.5f\n', result)
 
     # clean up
     free(sorted_vals)
@@ -475,8 +505,8 @@ cdef SIZE_t split_labels(DTYPE_t**  X,
                          DTYPE_t*   y,
                          IntList*   samples,
                          Threshold* threshold,
-                         DTYPE_t*   y_left,
-                         DTYPE_t*   y_right) nogil:
+                         DTYPE_t**  y_left,
+                         DTYPE_t**  y_right) nogil:
     """
     Splits label values into left and right branches.
 
@@ -487,35 +517,32 @@ cdef SIZE_t split_labels(DTYPE_t**  X,
     cdef SIZE_t left_count = 0
     cdef SIZE_t right_count = 0
 
-    if y_left is not NULL or y_right is not NULL:
-        raise ValueError('y_left or y_right is not NULL!')
-
-    y_left = <DTYPE_t *>malloc(samples.n * sizeof(DTYPE_t))
-    y_right = <DTYPE_t *>malloc(samples.n * sizeof(DTYPE_t))
+    if y_left[0] is NULL or y_right[0] is NULL:
+        raise ValueError('y_left or y_right is NULL!')
 
     # loop through the deleted samples
     for i in range(samples.n):
 
         # add sample to the left branch
         if X[samples.arr[i]][threshold.feature] <= threshold.value:
-            y_left[left_count] = y[samples.arr[i]]
+            y_left[0][left_count] = y[samples.arr[i]]
             left_count += 1
 
         # add sample to the right branch
         else:
-            y_right[right_count] = y[samples.arr[i]]
+            y_right[0][right_count] = y[samples.arr[i]]
             right_count += 1
 
     # resize left branch
     if left_count > 0:
-        y_left = <DTYPE_t *>realloc(y_left, left_count * sizeof(DTYPE_t))
+        y_left[0] = <DTYPE_t *>realloc(y_left[0], left_count * sizeof(DTYPE_t))
     else:
         free(y_left)
         y_left = NULL
 
     # resize right branch
     if right_count > 0:
-        y_right = <DTYPE_t *>realloc(y_right, right_count * sizeof(DTYPE_t))
+        y_right[0] = <DTYPE_t *>realloc(y_right[0], right_count * sizeof(DTYPE_t))
     else:
         free(y_right)
         y_right = NULL

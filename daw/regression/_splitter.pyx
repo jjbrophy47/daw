@@ -250,6 +250,8 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
                 # compute split score
                 split_score = compute_split_score(X, y, samples, threshold, criterion)
 
+                # printf('[S - SGT] split_score: %.5f\n', split_score)
+
                 # save if its the best score
                 if split_score < best_score:
                     best_score = split_score
@@ -296,7 +298,7 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
         node.constant_features = copy_intlist(constant_features, constant_features.n)
         node.chosen_feature = copy_feature(chosen_feature)
         node.chosen_threshold = copy_threshold(chosen_threshold)
-        node.slack = compute_slack(X, y, samples, chosen_threshold, second_best_threshold, criterion)
+        # node.slack = compute_slack(X, y, samples, chosen_threshold, second_best_threshold, criterion)
 
     # free features array
     else:

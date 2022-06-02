@@ -12,6 +12,8 @@ from libc.stdio cimport printf
 
 cimport cython
 
+from ._slack cimport MAX_FLOAT32
+
 
 # =======================
 # Streaming median
@@ -142,14 +144,18 @@ cdef void mmh_remove(MinMaxHeap* mmh, DTYPE_t x) nogil:
         mmh.total -= x
         return
 
+    # remove from smaller half of list, ensure heaps are balanced
     if x < mmh_median(mmh):
         max_heap_remove(mmh.max_heap, x)  # raises IndexError if not in heap
         if mmh.min_heap.size - mmh.max_heap.size > 1:
             item = min_heap_pop(mmh.min_heap)
             max_heap_insert(mmh.max_heap, item)
+
+    # remove from larger half of list, ensure min heap is equal to or
+    # larger than max heap by 1
     else:
         min_heap_remove(mmh.min_heap, x)  # raises IndexError if not in heap
-        if mmh.max_heap.size - mmh.min_heap.size > 1:
+        if mmh.max_heap.size - mmh.min_heap.size > 0:
             item = max_heap_pop(mmh.max_heap)
             min_heap_insert(mmh.min_heap, item)
 
@@ -177,6 +183,40 @@ cdef DTYPE_t mmh_mean(MinMaxHeap* mmh) nogil:
     Return mean.
     """
     return mmh.total / mmh.size
+
+
+cdef DTYPE_t mmh_min(MinMaxHeap* mmh) nogil:
+    """
+    Return min value of the MinMaxHeap.
+    """
+    cdef DTYPE_t result = MAX_FLOAT32
+    cdef SIZE_t i
+
+    if mmh.size == 1:
+        return mmh.min_heap.arr[0]
+
+    for i in range(mmh.max_heap.size):
+        if mmh.max_heap.arr[i] < result:
+            result = mmh.max_heap.arr[i]
+
+    return result
+
+
+cdef DTYPE_t mmh_max(MinMaxHeap* mmh) nogil:
+    """
+    Return min value of the MinMaxHeap.
+    """
+    cdef DTYPE_t result = -MAX_FLOAT32
+    cdef SIZE_t i
+
+    if mmh.size == 1:
+        return mmh.min_heap.arr[0]
+
+    for i in range(mmh.min_heap.size):
+        if mmh.min_heap.arr[i] > result:
+            result = mmh.min_heap.arr[i]
+
+    return result
 
 
 # =======================
@@ -585,6 +625,19 @@ cdef SIZE_t list_index(List* my_list, DTYPE_t item) nogil:
             return i
 
     raise IndexError('Item not in list!')
+
+cdef void list_print(List* my_list) nogil:
+    """
+    Print string representation of List.
+    """
+    cdef SIZE_t i = 0
+    printf('[')
+    for i in range(my_list.size):
+        printf('%.5f', my_list.arr[i])
+        if i != my_list.size - 1:
+            printf(', ')
+    printf(']\n')
+
 
 # private C API
 cdef void _list_increase_capacity(List* my_list) nogil:
