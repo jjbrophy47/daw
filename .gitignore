@@ -15,6 +15,7 @@ jobs/logs/
 dist/
 
 # files
+**.DS_Store
 **temp*
 **save*
 **results*
@@ -35,6 +36,8 @@ data/*/*.txt
 data/*/*.data
 data/*/*.test
 data/ctr/train
+
+data2
 
 # datasets to ignore
 data/5xor

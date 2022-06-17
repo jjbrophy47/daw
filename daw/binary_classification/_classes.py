@@ -184,13 +184,14 @@ class RandomForestClassifier(object):
 
         return leaves
 
-    def slack(self, X):
+    def structure_slack(self, X, manipulation='deletion'):
         """
         Predict root-to-leaf slack, that is, the minimum number of examples
-        that cause retraining when ADDED to a given decision node.
+        that cause retraining when ADDED/DELETED to a given decision node.
 
         Input
             X: np.ndarray, 2d array of input data.
+            manipulation: Type of data manipulation, {'deletion', 'addition'}.
 
         Return
             dict
@@ -203,7 +204,7 @@ class RandomForestClassifier(object):
         result = {}
 
         for i, tree in enumerate(self.trees_):
-            result[i] = tree.slack(X)  # shape=(len(X), total no. nodes in tree)
+            result[i] = tree.slack(X, manipulation=manipulation)  # shape=(len(X), total no. nodes in tree)
 
         return result
 
@@ -278,8 +279,8 @@ class RandomForestClassifier(object):
 
 class DecisionTreeClassifier(object):
     """
-    Dare tree, a decision tree that can efficiently
-    remove training data AFTER training.
+    DAW tree, a decision tree with prediction robustness
+    guarantees to data poisoning attacks.
 
     Parameters:
     -----------
@@ -319,16 +320,7 @@ class DecisionTreeClassifier(object):
         self.verbose = verbose
 
     def __str__(self):
-        s = 'Tree:'
-        s += '\ntopd={}'.format(self.topd)
-        s += '\nk={}'.format(self.k)
-        s += '\nmax_depth={}'.format(self.max_depth)
-        s += '\ncriterion={}'.format(self.criterion)
-        s += '\nmin_samples_split={}'.format(self.min_samples_split)
-        s += '\nmin_samples_leaf={}'.format(self.min_samples_leaf)
-        s += '\nrandom_state={}'.format(self.random_state)
-        s += '\nverbose={}'.format(self.verbose)
-        return s
+        return self.tree_.print_tree()
 
     def fit(self, X, y, max_features=None, manager=None):
         """
@@ -420,20 +412,42 @@ class DecisionTreeClassifier(object):
         leaves = self.tree_.apply(X)
         return leaves
 
-    def slack(self, X):
+    def leaf_slack(self, X):
         """
-        Predict root-to-leaf slack: minimum number of examples needed to cause
-        retraining when ADDING to a specific decision node.
+        Estimate leaf prediction slack: minimum number of deletions/removals
+        needed to flip the leaf prediction for each x in X.
 
         Input
             X: np.ndarray, 2d array of input data.
+
+        Return
+            np.ndarray, 2d array of root-to-leaf slack; shape=(len(X),).
+        """
+        assert X.ndim == 2
+        X = check_data(X)
+        slack_values = self.tree_.get_leaf_slack(X)
+        return slack_values
+
+    def structure_slack(self, X, manipulation='deletion'):
+        """
+        Predict root-to-leaf slack: minimum number of examples needed to cause
+        retraining when ADDING/DELETING to a specific decision node.
+
+        Input
+            X: np.ndarray, 2d array of input data.
+            manipulation: Type of data manipulation, {'deletion', 'addition'}.
 
         Return
             np.ndarray, 2d array of root-to-leaf slack; shape=(len(X), total no. nodes in tree).
         """
         assert X.ndim == 2
         X = check_data(X)
-        slack_values = self.tree_.slack(X)
+        if manipulation == 'deletion':
+            slack_values = self.tree_.deletion_slack(X)
+        elif manipulation == 'addition':
+            slack_values = self.tree_.addition_slack(X)
+        else:
+            raise ValueError(f'Unknown manipulation type {manipulation}')
         return slack_values
 
     def get_node_statistics(self):

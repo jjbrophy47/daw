@@ -41,7 +41,8 @@ cdef struct Node:
     # Greedy node properties
     Feature**  features                # Array of valid feature pointers
     SIZE_t     n_features              # Number of valid feature pointers
-    SIZE_t     slack                   # Minimum number of examples ADDED before retraining
+    SIZE_t     del_slack               # Minimum number of examples DELETED before structure changes
+    SIZE_t     add_slack               # Minimum number of examples ADDED before structure changes
 
     # Greedy / Random node properties
     IntList*   constant_features       # Array of constant feature indices
@@ -52,6 +53,7 @@ cdef struct Node:
     SIZE_t   leaf_id                   # Leaf identifier
     bint     is_leaf                   # Whether this node is a leaf
     DTYPE_t  value                     # Value, if leaf node
+    SIZE_t   leaf_slack                # Min. no. deletions/additions to flip leaf prediction
     SIZE_t*  leaf_samples              # Array of sample indices if leaf
 
 """
@@ -96,13 +98,16 @@ cdef class _Tree:
     # Python API
     cpdef np.ndarray predict(self, float[:, :] X)
     cpdef np.ndarray apply(self, float[:, :] X)
-    cpdef np.ndarray slack(self, float[:, :] X)
+    cpdef np.ndarray get_leaf_slack(self, float[:, :] X)
+    cpdef np.ndarray deletion_slack(self, float[:, :] X)
+    cpdef np.ndarray addition_slack(self, float[:, :] X)
     cpdef SIZE_t get_structure_memory(self)
     cpdef SIZE_t get_decision_stats_memory(self)
     cpdef SIZE_t get_leaf_stats_memory(self)
     cpdef SIZE_t get_node_count(self)
     cpdef SIZE_t get_random_node_count(self, SIZE_t topd)
     cpdef SIZE_t get_greedy_node_count(self, SIZE_t topd)
+    cpdef str print_tree(self)
 
     # C API
     cdef SIZE_t _get_structure_memory(self, Node* node) nogil
@@ -111,6 +116,8 @@ cdef class _Tree:
     cdef SIZE_t _get_node_count(self, Node* node) nogil
     cdef SIZE_t _get_random_node_count(self, Node* node, SIZE_t topd) nogil
     cdef SIZE_t _get_greedy_node_count(self, Node* node, SIZE_t topd) nogil
+    cdef str _print_tree(self, Node* node, int depth, str indent, bint last)
+    cdef str _print_node(self, Node* node)
 
 cdef class _TreeBuilder:
     """

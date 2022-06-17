@@ -16,7 +16,8 @@ import numpy as np
 cimport numpy as np
 np.import_array()
 
-from ._slack cimport compute_slack
+from ._slack cimport compute_split_slack_deletion
+from ._slack cimport compute_split_slack_addition
 from ._utils cimport compute_split_score
 from ._utils cimport rand_uniform
 from ._utils cimport rand_int
@@ -126,6 +127,7 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
 
     # keep track of the best feature / threshold
     cdef DTYPE_t    best_score = 1000000
+    cdef DTYPE_t    second_best_score = 1000000
     cdef DTYPE_t    split_score = -1
     cdef Feature*   chosen_feature = NULL
     cdef Threshold* chosen_threshold = NULL
@@ -252,13 +254,14 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
 
                 # save if its the best score
                 if split_score < best_score:
-                    best_score = split_score
 
-                    # save second best split
+                    # replace second best split with current best split
+                    second_best_score = best_score
                     second_best_feature = chosen_feature
                     second_best_threshold = chosen_threshold
 
                     # save best split
+                    best_score = split_score
                     chosen_feature = feature
                     chosen_threshold = threshold
 
@@ -266,6 +269,17 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
                     # printf('[S - SGT] chosen_feature.index: %ld, chosen_threshold.value: %.5f\n',
                     #        chosen_feature.index, chosen_threshold.value)
                     # if second_best_feature != NULL and second_best_threshold != NULL:
+                    #     printf('[S - SGT] second_best_feature.index: %ld, second_best_threshold.value: %.5f\n',
+                    #            second_best_feature.index, second_best_threshold.value)
+
+                # save second best split
+                elif split_score < second_best_score:
+                    second_best_score = split_score
+                    second_best_feature = feature
+                    second_best_threshold = threshold
+
+                    # if second_best_feature != NULL and second_best_threshold != NULL:
+                    #     printf('[S - SGT] score: %.5f\n', second_best_score)
                     #     printf('[S - SGT] second_best_feature.index: %ld, second_best_threshold.value: %.5f\n',
                     #            second_best_feature.index, second_best_threshold.value)
                     # printf('[S - SGT] threshold.n_left_samples: %ld, threshold.n_right_samples: %ld\n',
@@ -305,7 +319,8 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
         node.constant_features = copy_intlist(constant_features, constant_features.n)
         node.chosen_feature = copy_feature(chosen_feature)
         node.chosen_threshold = copy_threshold(chosen_threshold)
-        node.slack = compute_slack(chosen_threshold, second_best_threshold, samples.n, use_gini)
+        node.del_slack = compute_split_slack_deletion(chosen_threshold, second_best_threshold, samples.n, use_gini)
+        node.add_slack = compute_split_slack_addition(chosen_threshold, second_best_threshold, samples.n, use_gini)
 
     # free features array
     else:

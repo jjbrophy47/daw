@@ -2,27 +2,20 @@
 Data utility methods to make life easier.
 """
 import os
+from pathlib import Path
 
 import numpy as np
 
 
-def get_data(dataset, data_dir='data', continuous=True):
+def get_data(dataset, data_dir='data'):
     """
     Returns a train and test set from the desired dataset.
     """
-    in_dir = os.path.join(data_dir, dataset)
+    in_dir = Path(data_dir) / dataset / 'continuous'
+    assert in_dir.exists()
 
-    if continuous:
-        in_dir = os.path.join(in_dir, 'continuous')
-
-    assert os.path.exists(in_dir)
-
-    train = np.load(os.path.join(in_dir, 'train.npy')).astype(np.float32)
-    test = np.load(os.path.join(in_dir, 'test.npy')).astype(np.float32)
-
-    if not continuous:
-        assert np.all(np.unique(train) == np.array([0, 1]))
-        assert np.all(np.unique(test) == np.array([0, 1]))
+    train = np.load(in_dir / 'train.npy').astype(np.float32)
+    test = np.load(in_dir / 'test.npy').astype(np.float32)
 
     X_train = train[:, :-1]
     y_train = train[:, -1]

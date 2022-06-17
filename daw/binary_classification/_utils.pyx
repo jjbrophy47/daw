@@ -506,6 +506,7 @@ cdef void dealloc(Node *node) nogil:
     node.leaf_id = -1
     node.is_leaf = False
     node.value = UNDEF_LEAF_VAL
+    node.leaf_slack = -1
     node.leaf_samples = NULL
 
     # reset decision node properties
@@ -514,3 +515,5 @@ cdef void dealloc(Node *node) nogil:
     node.constant_features = NULL
     node.chosen_feature = NULL
     node.chosen_threshold = NULL
+    node.del_slack = -1
+    node.add_slack = -1

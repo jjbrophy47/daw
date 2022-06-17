@@ -19,6 +19,7 @@ import numpy as np
 cimport numpy as np
 np.import_array()
 
+from ._slack cimport compute_leaf_slack
 from ._utils cimport split_samples
 from ._utils cimport copy_indices
 from ._utils cimport create_intlist
@@ -153,12 +154,14 @@ cdef class _TreeBuilder:
         node.leaf_id = self.leaf_count_
         node.is_leaf = True
         node.leaf_samples = copy_indices(samples.arr, samples.n)
+        node.leaf_slack = compute_leaf_slack(node.n_samples, node.n_pos_samples)
         node.value = node.n_pos_samples / <double> node.n_samples
 
         # set greedy node properties
         node.features = NULL
         node.n_features = 0
-        node.slack = -2
+        node.del_slack = -2
+        node.add_slack = -2
 
         # set greedy / random node properties
         if node.constant_features != NULL:
@@ -210,7 +213,8 @@ cdef class _TreeBuilder:
         # initialize greedy node properties
         node.features = NULL
         node.n_features = 0
-        node.slack = -1
+        node.del_slack = -1
+        node.add_slack = -1
 
         # initialize greedy / random node properties
         node.constant_features = constant_features
@@ -221,6 +225,7 @@ cdef class _TreeBuilder:
         node.leaf_id = -1
         node.is_leaf = False
         node.value = UNDEF_LEAF_VAL
+        node.leaf_slack = -1
         node.leaf_samples = NULL
 
         self.node_count_ += 1
@@ -305,7 +310,36 @@ cdef class _Tree:
 
         return out
 
-    cpdef np.ndarray slack(self, float[:, :] X):
+    cpdef np.ndarray get_leaf_slack(self, float[:, :] X):
+        """
+        Predict leaf index for x in X.
+        """
+
+        # In / out
+        cdef SIZE_t n_samples = X.shape[0]
+        cdef np.ndarray[int] out = np.zeros((n_samples,), dtype=np.int32)
+
+        # Incrementers
+        cdef SIZE_t i = 0
+        cdef SIZE_t j = 0
+        cdef Node*  node = NULL
+
+        with nogil:
+
+            for i in range(n_samples):
+                node = self.root
+
+                while not node.is_leaf:
+                    if X[i, node.chosen_feature.index] <= node.chosen_threshold.value:
+                        node = node.left
+                    else:
+                        node = node.right
+
+                out[i] = node.leaf_slack
+
+        return out
+
+    cpdef np.ndarray deletion_slack(self, float[:, :] X):
         """
         Predict leaf index for x in X.
         """
@@ -325,7 +359,7 @@ cdef class _Tree:
             for i in range(n_samples):
                 node = self.root
                 j = 0
-                out[i, j] = node.slack
+                out[i, j] = node.del_slack
                 j += 1
 
                 while not node.is_leaf:
@@ -334,7 +368,41 @@ cdef class _Tree:
                     else:
                         node = node.right
 
-                    out[i, j] = node.slack
+                    out[i, j] = node.del_slack
+                    j += 1
+
+        return out
+
+    cpdef np.ndarray addition_slack(self, float[:, :] X):
+        """
+        Predict leaf index for x in X.
+        """
+
+        # In / out
+        cdef SIZE_t n_samples = X.shape[0]
+        cdef SIZE_t n_nodes = self._get_node_count(self.root)
+        cdef np.ndarray[int, ndim=2] out = np.zeros((n_samples, n_nodes), dtype=np.int32)
+
+        # Incrementers
+        cdef SIZE_t i = 0
+        cdef SIZE_t j = 0
+        cdef Node*  node = NULL
+
+        with nogil:
+
+            for i in range(n_samples):
+                node = self.root
+                j = 0
+                out[i, j] = node.add_slack
+                j += 1
+
+                while not node.is_leaf:
+                    if X[i, node.chosen_feature.index] <= node.chosen_threshold.value:
+                        node = node.left
+                    else:
+                        node = node.right
+
+                    out[i, j] = node.add_slack
                     j += 1
 
         return out
@@ -378,6 +446,12 @@ cdef class _Tree:
         Count number of greedy nodes.
         """
         return self._get_greedy_node_count(self.root, topd)
+
+    cpdef str print_tree(self):
+        """
+        Return a string representation of the tree structure.
+        """
+        return self._print_tree(self.root, 0, '', False)
 
     # private
     cdef SIZE_t _get_structure_memory(self, Node* node) nogil:
@@ -525,3 +599,44 @@ cdef class _Tree:
             result += self._get_greedy_node_count(node.right, topd)
 
         return result
+
+    cdef str _print_tree(self, Node* node, int depth, str indent, bint last):
+        """
+        Recursively print the tree using pre-order traversal.
+        """
+        out_str = ''
+        if not node:
+            return out_str
+
+        if depth == 0:
+            out_str += f'{self._print_node(node)}'
+        else:
+            out_str += f'\n{indent}'
+            if last:
+                out_str += f'R----{self._print_node(node)}'
+                indent += "     "
+            else:
+                out_str += f'L----{self._print_node(node)}'
+                indent += "|    "
+        out_str += self._print_tree(node.left, depth + 1, indent, False)
+        out_str += self._print_tree(node.right, depth + 1, indent, True)
+        return out_str
+
+    cdef str _print_node(self, Node* node):
+        """
+        Return string representation of the given node.
+        """
+        res = ''
+
+        if node.is_leaf:
+            res += f'[Leaf n={node.n_samples}'
+            res += f', n+={node.n_pos_samples}]'
+            res += f' val: {node.value:.5f}'
+
+        else:
+            res += f'[Split n={node.n_samples}'
+            res += f', n+={node.n_pos_samples}]'
+            res += f' feat: {node.chosen_threshold.feature}'
+            res += f', val: {node.chosen_threshold.value:.5f}'
+
+        return res
