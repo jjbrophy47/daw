@@ -6,6 +6,8 @@ import resource
 from pathlib import Path
 from datetime import datetime
 
+import matplotlib
+matplotlib.use('Agg')
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -92,9 +94,16 @@ def main(args):
     logger.info(f'\nAccuracy: {acc:.3f}, AUC: {auc:.3f}')
 
     # get number of correctly predicted test instances
-    test_correct_idxs = np.where(pred == y_test)[0]
+    total_test_correct_idxs = np.where(pred == y_test)[0]
+    total_n_test_correct = len(total_test_correct_idxs)
+    logger.info(f'{total_n_test_correct}/{len(y_test)} correctly predicted test instances')
+
+    # sample suset of correctly predicted test instances
+    rng = np.random.default_rng(args.random_state)
+    n_sample = min(args.max_test_correct, total_n_test_correct)
+    test_correct_idxs = rng.choice(total_test_correct_idxs, size=n_sample, replace=False)
     n_test_correct = len(test_correct_idxs)
-    logger.info(f'{n_test_correct}/{len(y_test)} test instances correctly predicted')
+    logger.info(f'{n_test_correct}/{total_n_test_correct} correctly predicted test instances sampled')
 
     # attack
     logger.info(f'\nAttacking ({args.manipulation}s)')
@@ -105,7 +114,7 @@ def main(args):
 
         # display progress
         if i  == 0:
-            continue
+            pass
         elif i % 10 == 0:
             progress_time = time.time() - start
             progress_times.append(progress_time)
@@ -186,6 +195,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='iris')
     parser.add_argument('--manipulation', type=str, default='addition')
     parser.add_argument('--random_state', type=int, default=1)
+    parser.add_argument('--max_test_correct', type=int, default=100)
 
     # Model settings
     parser.add_argument('--max_depth', type=int, default=1)
