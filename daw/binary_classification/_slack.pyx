@@ -61,7 +61,7 @@ cdef SIZE_t compute_split_slack_deletion(
     cdef Threshold* split2 = copy_threshold(second_threshold)
     cdef DTYPE_t score_gap = _compute_score_gap(split1, split2, n, use_gini)
 
-    printf('score_gap: %.5f\n', score_gap)
+    # printf('score_gap: %.5f\n', score_gap)
 
     if score_gap < 0:
         printf('[WARNING] split2 is better than split1!')
@@ -72,9 +72,9 @@ cdef SIZE_t compute_split_slack_deletion(
     # compute slack
     while score_gap >= 0:
         score_gap = _reduce_gap_deletion(split1, split2, n, use_gini)
-        printf('score_gap: %.5f\n', score_gap)
         slack += 1
         n += 1
+        # printf('score_gap: %.5f\n', score_gap)
 
         if score_gap == UNDEF_SCORE_GAP:
             slack = -100

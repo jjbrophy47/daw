@@ -319,8 +319,8 @@ cdef SIZE_t select_greedy_threshold(Node*     node,
         node.constant_features = copy_intlist(constant_features, constant_features.n)
         node.chosen_feature = copy_feature(chosen_feature)
         node.chosen_threshold = copy_threshold(chosen_threshold)
-        node.del_slack = compute_split_slack_deletion(chosen_threshold, second_best_threshold, samples.n, use_gini)
-        node.add_slack = compute_split_slack_addition(chosen_threshold, second_best_threshold, samples.n, use_gini)
+        # node.del_slack = compute_split_slack_deletion(chosen_threshold, second_best_threshold, samples.n, use_gini)
+        # node.add_slack = compute_split_slack_addition(chosen_threshold, second_best_threshold, samples.n, use_gini)
 
     # free features array
     else:

@@ -13,6 +13,7 @@ jobs/logs/
 **.ipynb_checkpoints/
 **.egg-info
 dist/
+.vscode
 
 # files
 **.DS_Store
@@ -40,6 +41,9 @@ data/ctr/train
 data2
 
 # datasets to ignore
+data/ctr/day_0
+data/ctr/job_error
+data/ctr/job_output
 data/5xor
 data/6xor
 data/activity

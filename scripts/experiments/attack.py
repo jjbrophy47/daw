@@ -9,6 +9,7 @@ from datetime import datetime
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+from sklearn.base import clone
 from sklearn.datasets import load_iris
 from sklearn.datasets import load_boston
 from sklearn.metrics import accuracy_score
@@ -82,30 +83,77 @@ def main(args):
 
     # predict
     pred = model.predict(X_test)
-    proba = model.predict_proba(X_test)[:, 1]
+    proba = model.predict_proba(X_test)
     logger.info(f'\nPrediction:\n{pred}')
 
     # evaluate
     acc = accuracy_score(y_test, pred)
-    auc = roc_auc_score(y_test, proba)
+    auc = roc_auc_score(y_test, proba[:, 1])
     logger.info(f'\nAccuracy: {acc:.3f}, AUC: {auc:.3f}')
 
-    # structural slack
-    structure_slack = model.structure_slack(X_test, manipulation=args.manipulation)
-    structure_slack = np.where(structure_slack <= 0, np.inf, structure_slack)
-    structure_slack = np.min(structure_slack, axis=1)
-    logger.info(f'\nMinimum structural slack:\n{structure_slack}')
+    # get number of correctly predicted test instances
+    test_correct_idxs = np.where(pred == y_test)[0]
+    n_test_correct = len(test_correct_idxs)
+    logger.info(f'{n_test_correct}/{len(y_test)} test instances correctly predicted')
 
-    fig, ax = plt.subplots()
-    sns.histplot(structure_slack, stat='percent', ax=ax)
+    # attack
+    logger.info(f'\nAttacking ({args.manipulation}s)')
+    res_list = []
+    start = time.time()
+    progress_times = []
+    for i, idx in enumerate(test_correct_idxs):
+
+        # display progress
+        if i  == 0:
+            continue
+        elif i % 10 == 0:
+            progress_time = time.time() - start
+            progress_times.append(progress_time)
+            avg_progress_time = np.mean(progress_times)
+            cum_progress_time = np.sum(progress_times)
+            est_total_time = avg_progress_time * (len(test_correct_idxs) / 10)
+            est_time_rem = est_total_time - cum_progress_time
+
+            logger.info(f'\n{i}/{n_test_correct}, '
+                        f'time: {progress_time:.2f}s, '
+                        f'avg. time: {avg_progress_time:.2f}s, '
+                        f'est. time remaining: {est_time_rem:.2f}s')
+            logger.info(f'partial results: {res_list}')
+            start = time.time()
+
+        # initial dataset
+        X_train_temp = X_train.copy()
+        y_train_temp = y_train.copy()
+
+        # initial prediction
+        pred_init = pred_temp = pred[idx]
+
+        # get test instance w/ opposite label
+        x_test_temp = X_test[[idx]]
+        y_test_temp = [1] if y_test[idx] == 0 else [0]
+
+        # add copies of test instance (w/ opposite label) until pred changes
+        res = 0
+        while pred_temp == pred_init:
+            X_train_temp = np.concatenate((X_train_temp, x_test_temp), axis=0)
+            y_train_temp = np.concatenate((y_train_temp, y_test_temp), axis=0)
+
+            # train new model and re-predict
+            model_temp = clone(model).fit(X_train_temp, y_train_temp)
+            pred_temp = model_temp.predict(x_test_temp)[0]
+            res += 1
+
+        res_list.append(res)
+    
+    # upper lower bound on additions needed to flip prediction
+    logger.info(f'\nNo. instances added to flip prediction:\n{res_list}')
+
+    _, ax = plt.subplots()
+    sns.histplot(res_list, stat='percent', ax=ax)
     ax.set_ylabel('% test instances')
-    ax.set_xlabel(f'No. {args.manipulation}s until structural change')
-    ax.set_title(f'{args.dataset.capitalize()} ({X_train.shape[0]:,}) max_depth: {args.max_depth}')
+    ax.set_xlabel(f'No. {args.manipulation}s until prediction change')
+    ax.set_title(f'{args.dataset.capitalize()} ({n_test_correct} correct test) max_depth: {args.max_depth}')
     plt.savefig(out_dir / 'hist.pdf', bbox_inches='tight')
-
-    # leaf slack
-    leaf_slack = model.leaf_slack(X_test)
-    logger.info(f'\nLeaf slack:\n{leaf_slack}')
 
     # save model results
     result = {}
@@ -116,8 +164,9 @@ def main(args):
     result['n_test'] = X_test.shape[0]
     result['acc'] = acc
     result['auc'] = auc
-    result['structure_slack'] = structure_slack
-    result['leaf_slack'] = leaf_slack
+    result['n_test_correct'] = n_test_correct
+    result['test_correct_confidences'] = proba[test_correct_idxs, pred[test_correct_idxs]]
+    result['test_correct_manipulations'] = np.array(res_list)
     result['experiment_time'] = time.time() - begin
     result['max_rss'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
@@ -130,12 +179,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # I/O settings
-    parser.add_argument('--data_dir', type=str, default='data2')
-    parser.add_argument('--out_dir', type=str, default='output/experiments/robustness/')
+    parser.add_argument('--data_dir', type=str, default='data')
+    parser.add_argument('--out_dir', type=str, default='output/experiments/attack/')
 
     # Experiment settings
     parser.add_argument('--dataset', type=str, default='iris')
-    parser.add_argument('--manipulation', type=str, default='deletion')
+    parser.add_argument('--manipulation', type=str, default='addition')
     parser.add_argument('--random_state', type=int, default=1)
 
     # Model settings
