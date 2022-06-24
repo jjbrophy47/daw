@@ -117,7 +117,7 @@ def main(args):
     logger.info(f'{n_test_correct}/{total_n_test_correct} correctly predicted test instances sampled')
 
     # get encoding of sampled correctly predicted test instances
-    if args.manipulation == 'deletion':
+    if args.manipulation in ['deletion', 'swap']:
         train_encoding = model.leaf_path(X_train)  # shape=(n_train, n_leaves)
         test_encoding = model.leaf_path(X_test)  # shape=(n_test, n_leaves)
         train_test_sim = np.dot(train_encoding, test_encoding.T)  # shape=(n_train, n_test)
@@ -132,7 +132,7 @@ def main(args):
         # display progress
         if i  == 0:
             pass
-        elif i % 1 == 0:
+        elif i % 10 == 0:
             progress_time = time.time() - start
             progress_times.append(progress_time)
             avg_progress_time = np.mean(progress_times)
@@ -193,7 +193,33 @@ def main(args):
                 # train new model and re-predict
                 model_temp = clone(model).fit(X_train_temp, y_train_temp)
                 pred_temp = model_temp.predict(x_test_temp)[0]
-                proba_temp = model_temp.predict_proba(x_test_temp)
+                res += 1
+
+                if pred_temp != pred_init:
+                    break
+
+        # swap the labels from training set
+        elif args.manipulation == 'swap':
+
+            # get test instance
+            x_test_temp = X_test[[idx]]
+
+            # initial training set
+            y_train_temp = y_train.copy()
+
+            # sort training examples by influence to the test instance using weighted leaf path
+            sim = train_test_sim[:, idx]  # shape=(n_train,)
+            sgn = np.where(y_train == pred_init, 1.0, -1.0)  # shape=(n_train,)
+            influence = sim * sgn  # shape=(n_train,)
+            influence_idxs = np.argsort(influence)[::-1]  # shape=(n_train,)
+
+            # remove most positively influential examples until pred changes
+            for influence_idx in influence_idxs:
+                y_train_temp[influence_idx] = 1 if y_train_temp[influence_idx] == 0 else 0
+
+                # train new model and re-predict
+                model_temp = clone(model).fit(X_train, y_train_temp)
+                pred_temp = model_temp.predict(x_test_temp)[0]
                 res += 1
 
                 if pred_temp != pred_init:
