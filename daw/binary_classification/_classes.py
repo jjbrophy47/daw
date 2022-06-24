@@ -412,6 +412,22 @@ class DecisionTreeClassifier(object):
         leaves = self.tree_.apply(X)
         return leaves
 
+    def leaf_path(self, X, output=False, weighted=True):
+        """
+        Predict leaf indices.
+
+        Input
+            X: np.ndarray, 2d array of input data.
+            output: bool, If True, return the leaf value, 1.0 otherwise.
+            weighted: bool, If True, weight oputput by 1 / n_samples at leaf.
+
+        Return
+            np.ndarray, 2d array of leaf paths; shape=(len(X), n_leaves).
+        """
+        assert X.ndim == 2
+        X = check_data(X)
+        return self.tree_.leaf_path(X, output, weighted)
+
     def leaf_slack(self, X):
         """
         Estimate leaf prediction slack: minimum number of deletions/removals

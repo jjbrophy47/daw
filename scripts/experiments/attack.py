@@ -83,6 +83,17 @@ def main(args):
         random_state=args.random_state).fit(X_train, y_train)
     logger.info(f'\nModel:\n{model}')
 
+    # train_encoding = model.leaf_path(X_train)
+    # test_encoding = model.leaf_path(X_test)
+    # sim = np.dot(train_encoding, test_encoding.T)
+    # sim0 = np.dot(train_encoding, test_encoding[0])
+    # sim1 = np.dot(train_encoding, test_encoding[1])
+    # print(sim, sim.shape)
+    # print(sim0, sim0.shape)
+    # assert np.all(sim0 == sim[:, 0])
+    # assert np.all(sim1 == sim[:, 1])
+    # sgn = np.where(y_train == y_test, 1.0, -1.0)
+
     # predict
     pred = model.predict(X_test)
     proba = model.predict_proba(X_test)
@@ -98,12 +109,18 @@ def main(args):
     total_n_test_correct = len(total_test_correct_idxs)
     logger.info(f'{total_n_test_correct}/{len(y_test)} correctly predicted test instances')
 
-    # sample suset of correctly predicted test instances
+    # sample subset of correctly predicted test instances
     rng = np.random.default_rng(args.random_state)
     n_sample = min(args.max_test_correct, total_n_test_correct)
     test_correct_idxs = rng.choice(total_test_correct_idxs, size=n_sample, replace=False)
     n_test_correct = len(test_correct_idxs)
     logger.info(f'{n_test_correct}/{total_n_test_correct} correctly predicted test instances sampled')
+
+    # get encoding of sampled correctly predicted test instances
+    if args.manipulation == 'deletion':
+        train_encoding = model.leaf_path(X_train)  # shape=(n_train, n_leaves)
+        test_encoding = model.leaf_path(X_test)  # shape=(n_test, n_leaves)
+        train_test_sim = np.dot(train_encoding, test_encoding.T)  # shape=(n_train, n_test)
 
     # attack
     logger.info(f'\nAttacking ({args.manipulation}s)')
@@ -115,7 +132,7 @@ def main(args):
         # display progress
         if i  == 0:
             pass
-        elif i % 10 == 0:
+        elif i % 1 == 0:
             progress_time = time.time() - start
             progress_times.append(progress_time)
             avg_progress_time = np.mean(progress_times)
@@ -130,27 +147,60 @@ def main(args):
             logger.info(f'partial results: {res_list}')
             start = time.time()
 
-        # initial dataset
-        X_train_temp = X_train.copy()
-        y_train_temp = y_train.copy()
-
         # initial prediction
         pred_init = pred_temp = pred[idx]
 
-        # get test instance w/ opposite label
-        x_test_temp = X_test[[idx]]
-        y_test_temp = [1] if y_test[idx] == 0 else [0]
-
-        # add copies of test instance (w/ opposite label) until pred changes
         res = 0
-        while pred_temp == pred_init:
-            X_train_temp = np.concatenate((X_train_temp, x_test_temp), axis=0)
-            y_train_temp = np.concatenate((y_train_temp, y_test_temp), axis=0)
 
-            # train new model and re-predict
-            model_temp = clone(model).fit(X_train_temp, y_train_temp)
-            pred_temp = model_temp.predict(x_test_temp)[0]
-            res += 1
+        # add examples to training set
+        if args.manipulation == 'addition':
+
+            # get test instance w/ opposite label
+            x_test_temp = X_test[[idx]]
+            y_test_temp = [1] if y_test[idx] == 0 else [0]
+
+            # initial training set
+            X_train_temp = X_train.copy()
+            y_train_temp = y_train.copy()
+
+            # add copies of test instance (w/ opposite label) until pred changes
+            while pred_temp == pred_init:
+                X_train_temp = np.concatenate((X_train_temp, x_test_temp), axis=0)
+                y_train_temp = np.concatenate((y_train_temp, y_test_temp), axis=0)
+
+                # train new model and re-predict
+                model_temp = clone(model).fit(X_train_temp, y_train_temp)
+                pred_temp = model_temp.predict(x_test_temp)[0]
+                res += 1
+        
+        # remove examples from training set
+        elif args.manipulation == 'deletion':
+
+            # get test instance
+            x_test_temp = X_test[[idx]]
+
+            # sort training examples by influence to the test instance using weighted leaf path
+            sim = train_test_sim[:, idx]  # shape=(n_train,)
+            sgn = np.where(y_train == pred_init, 1.0, -1.0)  # shape=(n_train,)
+            influence = sim * sgn  # shape=(n_train,)
+            influence_idxs = np.argsort(influence)[::-1]  # shape=(n_train,)
+
+            # remove most positively influential examples until pred changes
+            for i in range(len(influence_idxs)):
+                X_train_temp = np.delete(X_train, influence_idxs[:i + 1], axis=0)
+                y_train_temp = np.delete(y_train, influence_idxs[:i + 1])
+
+                # train new model and re-predict
+                model_temp = clone(model).fit(X_train_temp, y_train_temp)
+                pred_temp = model_temp.predict(x_test_temp)[0]
+                proba_temp = model_temp.predict_proba(x_test_temp)
+                res += 1
+
+                if pred_temp != pred_init:
+                    break
+
+        else:
+            raise ValueError(f'Unknown manipulation: {args.manipulation}')
 
         res_list.append(res)
     

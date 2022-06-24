@@ -94,6 +94,8 @@ cdef class _Tree:
 
     # Inner structures
     cdef Node*   root                    # Root node
+    cdef SIZE_t  node_count_             # Number of nodes in the tree
+    cdef SIZE_t  leaf_count_             # Number of leaves in the tree
 
     # Python API
     cpdef np.ndarray predict(self, float[:, :] X)
@@ -101,6 +103,7 @@ cdef class _Tree:
     cpdef np.ndarray get_leaf_slack(self, float[:, :] X)
     cpdef np.ndarray deletion_slack(self, float[:, :] X)
     cpdef np.ndarray addition_slack(self, float[:, :] X)
+    cpdef np.ndarray leaf_path(self, DTYPE_t[:, :] X, bint output, bint weighted)
     cpdef SIZE_t get_structure_memory(self)
     cpdef SIZE_t get_decision_stats_memory(self)
     cpdef SIZE_t get_leaf_stats_memory(self)

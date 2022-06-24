@@ -35,14 +35,6 @@ cdef class _TreeBuilder:
     Build a decision tree in depth-first fashion.
     """
 
-    property node_count_:
-        def __get__(self):
-            return self.node_count_
-
-    property leaf_count_:
-        def __get__(self):
-            return self.leaf_count_
-
     def __cinit__(self,
                   _DataManager manager,
                   _Splitter    splitter,
@@ -73,6 +65,8 @@ cdef class _TreeBuilder:
         self.node_count_ = 0
         self.leaf_count_ = 0
         tree.root = self._build(X, y, samples, constant_features, 0, 0)
+        tree.node_count_ = self.node_count_
+        tree.leaf_count_ = self.leaf_count_
 
     cdef Node* _build(self,
                       DTYPE_t** X,
@@ -149,7 +143,6 @@ cdef class _TreeBuilder:
         """
         Compute leaf value and set all other attributes.
         """
-
         # set leaf node properties
         node.leaf_id = self.leaf_count_
         node.is_leaf = True
@@ -239,11 +232,21 @@ cdef class _TreeBuilder:
 
 cdef class _Tree:
 
+    property node_count_:
+        def __get__(self):
+            return self.node_count_
+
+    property leaf_count_:
+        def __get__(self):
+            return self.leaf_count_
+
     def __cinit__(self):
         """
         Constructor.
         """
         self.root = NULL
+        self.node_count_ = 0
+        self.leaf_count_ = 0
 
     def __dealloc__(self):
         """
@@ -253,6 +256,8 @@ cdef class _Tree:
         if self.root:
             dealloc(self.root)
             free(self.root)
+        self.node_count_ = 0
+        self.leaf_count_ = 0
 
     cpdef np.ndarray predict(self, float[:,:] X):
         """
@@ -406,6 +411,44 @@ cdef class _Tree:
                     j += 1
 
         return out
+
+    cpdef np.ndarray leaf_path(self, DTYPE_t[:, :] X, bint output, bint weighted):
+        """
+        Return 2d vector of leaf one-hot encodings, shape=(X.shape[0], no. leaves).
+        """
+
+        # In / out
+        cdef SIZE_t        n_samples = X.shape[0]
+        cdef SIZE_t        n_leaves = self.leaf_count_
+        cdef DTYPE_t[:, :] out = np.zeros((n_samples, n_leaves), dtype=np.float32)
+        cdef DTYPE_t       val = 1.0
+
+        # Incrementers
+        cdef SIZE_t i = 0
+        cdef Node*  node = NULL
+
+        with nogil:
+
+            for i in range(n_samples):
+                node = self.root
+
+                while not node.is_leaf:
+                    if X[i, node.chosen_feature.index] <= node.chosen_threshold.value:
+                        node = node.left
+                    else:
+                        node = node.right
+
+                val = 1.0
+
+                if output:
+                    val = node.value
+
+                if weighted:
+                    val /= <DTYPE_t> node.n_samples
+
+                out[i][node.leaf_id] = val
+
+        return np.asarray(out)
 
     # tree information
     cpdef SIZE_t get_structure_memory(self):
