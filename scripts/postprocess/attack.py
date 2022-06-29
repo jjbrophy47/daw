@@ -78,11 +78,7 @@ if __name__ == '__main__':
         default=['adult', 'bank_marketing', 'census', 'credit_card', 'diabetes',
         'flight_delays', 'gas_sensor', 'higgs', 'no_show', 'olympics',
         'surgical', 'synthetic', 'twitter', 'vaccine'])
-    # parser.add_argument('--dataset', type=str, nargs='+',
-    #     default=['adult', 'bank_marketing', 'census', 'credit_card', 'diabetes',
-    #     'flight_delays', 'gas_sensor', 'no_show', 'olympics',
-    #     'surgical', 'twitter', 'vaccine'])
-    parser.add_argument('--manipulation', type=str, nargs='+', default=['deletion', 'addition'])
+    parser.add_argument('--manipulation', type=str, nargs='+', default=['deletion', 'addition', 'swap'])
     parser.add_argument('--max_depth', type=int, nargs='+', default=[1, 2, 3, 4, 5])
 
     parser.add_argument('--share_xy', action='store_true')

@@ -83,17 +83,6 @@ def main(args):
         random_state=args.random_state).fit(X_train, y_train)
     logger.info(f'\nModel:\n{model}')
 
-    # train_encoding = model.leaf_path(X_train)
-    # test_encoding = model.leaf_path(X_test)
-    # sim = np.dot(train_encoding, test_encoding.T)
-    # sim0 = np.dot(train_encoding, test_encoding[0])
-    # sim1 = np.dot(train_encoding, test_encoding[1])
-    # print(sim, sim.shape)
-    # print(sim0, sim0.shape)
-    # assert np.all(sim0 == sim[:, 0])
-    # assert np.all(sim1 == sim[:, 1])
-    # sgn = np.where(y_train == y_test, 1.0, -1.0)
-
     # predict
     pred = model.predict(X_test)
     proba = model.predict_proba(X_test)
@@ -156,28 +145,39 @@ def main(args):
         if args.manipulation == 'addition':
 
             # get test instance w/ opposite label
-            x_test_temp = X_test[[idx]]
-            y_test_temp = [1] if y_test[idx] == 0 else [0]
-
-            # initial training set
-            X_train_temp = X_train.copy()
-            y_train_temp = y_train.copy()
+            x_test = X_test[[idx]]
+            y_test_flip = 1 if y_test[idx] == 0 else 0
 
             # add copies of test instance (w/ opposite label) until pred changes
-            while pred_temp == pred_init:
-                X_train_temp = np.concatenate((X_train_temp, x_test_temp), axis=0)
-                y_train_temp = np.concatenate((y_train_temp, y_test_temp), axis=0)
+            # using a binary search
+            l = 0
+            r = len(X_train)
+            while l < r:
 
-                # train new model and re-predict
+                # add half the search range to the training set
+                n_add = (r + l) // 2
+                X_add_temp = np.repeat(x_test, repeats=n_add, axis=0)  # shape=(n_add, n_features)
+                y_add_temp = np.repeat(y_test_flip, repeats=n_add, axis=0) # shape=(n_add,)
+
+                X_train_temp = np.concatenate((X_train, X_add_temp), axis=0)
+                y_train_temp = np.concatenate((y_train, y_add_temp), axis=0)
+
+                # train a new model and re-predict
                 model_temp = clone(model).fit(X_train_temp, y_train_temp)
-                pred_temp = model_temp.predict(x_test_temp)[0]
-                res += 1
+                pred_temp = model_temp.predict(x_test)[0]
+
+                # adjust search range
+                if pred_temp != pred_init:
+                    r = n_add
+                    res = n_add
+                else:
+                    l = n_add + 1
         
         # remove examples from training set
         elif args.manipulation == 'deletion':
 
             # get test instance
-            x_test_temp = X_test[[idx]]
+            x_test = X_test[[idx]]
 
             # sort training examples by influence to the test instance using weighted leaf path
             sim = train_test_sim[:, idx]  # shape=(n_train,)
@@ -185,18 +185,27 @@ def main(args):
             influence = sim * sgn  # shape=(n_train,)
             influence_idxs = np.argsort(influence)[::-1]  # shape=(n_train,)
 
-            # remove most positively influential examples until pred changes
-            for i in range(len(influence_idxs)):
-                X_train_temp = np.delete(X_train, influence_idxs[:i + 1], axis=0)
-                y_train_temp = np.delete(y_train, influence_idxs[:i + 1])
+            # remove most positively influential examples until pred changes using binary search
+            # for i in range(len(influence_idxs)):
+            l = 0
+            r = len(X_train)
+            while l < r:
+                n_remove = (r + l) // 2
+                remove_idxs = influence_idxs[:n_remove]
+
+                X_train_temp = np.delete(X_train, remove_idxs, axis=0)
+                y_train_temp = np.delete(y_train, remove_idxs)
 
                 # train new model and re-predict
                 model_temp = clone(model).fit(X_train_temp, y_train_temp)
-                pred_temp = model_temp.predict(x_test_temp)[0]
-                res += 1
-
+                pred_temp = model_temp.predict(x_test)[0]
+                
+                # adjust search range
                 if pred_temp != pred_init:
-                    break
+                    r = n_remove
+                    res = n_remove
+                else:
+                    l = n_remove + 1
 
         # swap the labels from training set
         elif args.manipulation == 'swap':
@@ -213,7 +222,7 @@ def main(args):
             influence = sim * sgn  # shape=(n_train,)
             influence_idxs = np.argsort(influence)[::-1]  # shape=(n_train,)
 
-            # remove most positively influential examples until pred changes
+            # TODO: flip label of most positively influential examples until pred changes using binary search
             for influence_idx in influence_idxs:
                 y_train_temp[influence_idx] = 1 if y_train_temp[influence_idx] == 0 else 0
 
