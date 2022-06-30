@@ -28,15 +28,18 @@ def main(args):
     logger.info(f'\nScript arguments: {args}')
     logger.info(f'\nTimestamp: {datetime.now()}')
 
+    # get datasets
+    datasets = [d for d in args.dataset if d not in args.ignore]
+
     # plot histograms for each manipulation/dataset/max_depth combination
     for manipulation in args.manipulation:
         logger.info(f'\n{manipulation}...')
 
-        nrows, ncols = len(args.dataset), len(args.max_depth)
+        nrows, ncols = len(datasets), len(args.max_depth)
         sharex = sharey = 'row' if args.share_xy else 'none'
         _, axs = plt.subplots(nrows, ncols, figsize=(3 * ncols, 2.5 * nrows), sharex=sharex, sharey=sharey)
 
-        for i, dataset in enumerate(args.dataset):
+        for i, dataset in enumerate(datasets):
             logger.info(f'\n\t{dataset}...')
 
             for j, max_depth in enumerate(args.max_depth):
@@ -46,16 +49,26 @@ def main(args):
                 if not fp.exists():
                     continue
 
+                # get results
                 res = np.load(fp, allow_pickle=True)[()]
 
                 # plot
                 ax = axs[i][j]
-                sns.histplot(res['test_correct_manipulations'], stat='percent', ax=ax)
+
+                # CDF
+                if not args.hist:
+                    x = np.sort(res['test_correct_manipulations'])
+                    y = np.arange(1, len(x) + 1) / len(x) * 100
+                    ax.plot(x, y, '-')
+
+                # histogram
+                else:
+                    sns.histplot(res['test_correct_manipulations'], stat='percent', ax=ax)
+
                 ax.set_ylabel(f'% test ({res["n_test_correct"]} instances)')
                 ax.set_xlabel(f'# {manipulation}s until prediction change')
                 ax.set_title(f'max. depth: {max_depth}')
                 plt.setp(ax.get_xticklabels(), ha="right", rotation=45)
-
                 axs[i][0].set_ylabel(f'{dataset}\n'
                     f'{res["n_train"]:,}/{res["n_test"]:,} train/test\n'
                     f'% test ({res["n_test_correct"]} instances)')
@@ -78,9 +91,12 @@ if __name__ == '__main__':
         default=['adult', 'bank_marketing', 'census', 'credit_card', 'diabetes',
         'flight_delays', 'gas_sensor', 'higgs', 'no_show', 'olympics',
         'surgical', 'synthetic', 'twitter', 'vaccine'])
+    parser.add_argument('--ignore', type=str, nargs='+', default=['higgs', 'synthetic'])
     parser.add_argument('--manipulation', type=str, nargs='+', default=['deletion', 'addition', 'swap'])
     parser.add_argument('--max_depth', type=int, nargs='+', default=[1, 2, 3, 4, 5])
 
+    # plot settings
+    parser.add_argument('--hist', action='store_true')
     parser.add_argument('--share_xy', action='store_true')
 
     args = parser.parse_args()

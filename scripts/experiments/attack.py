@@ -109,7 +109,6 @@ def main(args):
     if args.manipulation in ['deletion', 'swap']:
         train_encoding = model.leaf_path(X_train)  # shape=(n_train, n_leaves)
         test_encoding = model.leaf_path(X_test)  # shape=(n_test, n_leaves)
-        train_test_sim = np.dot(train_encoding, test_encoding.T)  # shape=(n_train, n_test)
 
     # attack
     logger.info(f'\nAttacking ({args.manipulation}s)')
@@ -138,6 +137,13 @@ def main(args):
 
         # initial prediction
         pred_init = pred_temp = pred[idx]
+
+        # training influences on test instance
+        if args.manipulation in ['deletion', 'swap']:
+            sim = np.dot(train_encoding, test_encoding[idx])  # shape=(n_train,)
+            sgn = np.where(y_train == pred_init, 1.0, -1.0)  # shape=(n_train,)
+            influence = sim * sgn  # shape=(n_train,)
+            influence_idxs = np.argsort(influence)[::-1]  # shape=(n_train,)
 
         res = 0
 
@@ -174,19 +180,14 @@ def main(args):
                     l = n_add + 1
         
         # remove examples from training set
+        # NOTE: binary search MAY not ALWAYS find the LOWER BOUND based on removing SIMILAR examples,
+        #       need to remove TEST EXAMPLE from the training set...
         elif args.manipulation == 'deletion':
 
             # get test instance
             x_test = X_test[[idx]]
 
-            # sort training examples by influence to the test instance using weighted leaf path
-            sim = train_test_sim[:, idx]  # shape=(n_train,)
-            sgn = np.where(y_train == pred_init, 1.0, -1.0)  # shape=(n_train,)
-            influence = sim * sgn  # shape=(n_train,)
-            influence_idxs = np.argsort(influence)[::-1]  # shape=(n_train,)
-
             # remove most positively influential examples until pred changes using binary search
-            # for i in range(len(influence_idxs)):
             l = 0
             r = len(X_train)
             while l < r:
@@ -211,28 +212,34 @@ def main(args):
         elif args.manipulation == 'swap':
 
             # get test instance
-            x_test_temp = X_test[[idx]]
+            x_test = X_test[[idx]]
 
             # initial training set
             y_train_temp = y_train.copy()
 
-            # sort training examples by influence to the test instance using weighted leaf path
-            sim = train_test_sim[:, idx]  # shape=(n_train,)
-            sgn = np.where(y_train == pred_init, 1.0, -1.0)  # shape=(n_train,)
-            influence = sim * sgn  # shape=(n_train,)
-            influence_idxs = np.argsort(influence)[::-1]  # shape=(n_train,)
+            # flip label of most positively influential examples until pred changes using binary search
+            # NOTE: binary search does not ALWAYS find the LOWER BOUND, sometimes flipping
+            #       the first e.g., 12 examples will change the prediction but NOT 13, but then again on 23...
+            l = 0
+            r = len(X_train)
+            while l < r:
+                n_swap = (r + l) // 2
+                swap_idxs = influence_idxs[:n_swap]
 
-            # TODO: flip label of most positively influential examples until pred changes using binary search
-            for influence_idx in influence_idxs:
-                y_train_temp[influence_idx] = 1 if y_train_temp[influence_idx] == 0 else 0
+                y_train_temp[swap_idxs] = 1 - y_train_temp[swap_idxs]  # flip
 
                 # train new model and re-predict
                 model_temp = clone(model).fit(X_train, y_train_temp)
-                pred_temp = model_temp.predict(x_test_temp)[0]
-                res += 1
+                pred_temp = model_temp.predict(x_test)[0]
 
+                y_train_temp[swap_idxs] = 1 - y_train_temp[swap_idxs]  # flip back
+
+                # adjust search range
                 if pred_temp != pred_init:
-                    break
+                    r = n_swap
+                    res = n_swap
+                else:
+                    l = n_swap + 1
 
         else:
             raise ValueError(f'Unknown manipulation: {args.manipulation}')
