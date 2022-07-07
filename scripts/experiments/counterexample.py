@@ -32,7 +32,7 @@ def main(args):
     begin = time.time()
 
     # create output directory
-    out_dir = Path(args.out_dir) / f'depth_{args.max_depth}'
+    out_dir = Path(args.out_dir) / f'attr_{args.p}' / f'copies_{args.num_copies}' / f'depth_{args.max_depth}'
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # create logger
