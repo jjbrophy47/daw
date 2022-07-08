@@ -9,14 +9,18 @@ from datetime import datetime
 import matplotlib
 matplotlib.use('Agg')
 import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
+from scipy.stats import gaussian_kde
 from sklearn.base import clone
 from sklearn.datasets import load_iris
 from sklearn.datasets import load_boston
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from lightgbm import LGBMClassifier
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../../../')
@@ -63,7 +67,7 @@ def main(args):
     begin = time.time()
 
     # create output directory
-    out_dir = Path(args.out_dir) / args.dataset / args.manipulation / f'depth_{args.max_depth}'
+    out_dir = Path(args.out_dir) / args.dataset / args.model / args.manipulation / f'depth_{args.max_depth}'
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # create logger
@@ -79,12 +83,24 @@ def main(args):
     logger.info(f'y_test: {y_test.shape}')
 
     # train
-    model = daw.DecisionTreeClassifier(topd=args.topd, k=args.k, max_depth=args.max_depth,
-        random_state=args.random_state).fit(X_train, y_train)
+    if args.model == 'dt':
+        model = DecisionTreeClassifier(max_depth=args.max_depth,
+            random_state=args.random_state).fit(X_train, y_train)
+    elif args.model == 'rf':
+        model = RandomForestClassifier(n_estimators=args.n_estimators, max_depth=args.max_depth,
+            random_state=args.random_state).fit(X_train, y_train)
+    elif args.model == 'lr':
+        model = LogisticRegression(solver=args.solver, max_iter=args.max_iter, C=args.C,
+            random_state=args.random_state).fit(X_train, y_train)
+    elif args.model == 'lgb':
+        model = LGBMClassifier(n_estimators=args.n_estimators, max_depth=args.max_depth,
+            random_state=args.random_state).fit(X_train, y_train)
+    else:
+        raise ValueError(f'Unknown model: {args.model}')
     logger.info(f'\nModel:\n{model}')
 
     # predict
-    pred = model.predict(X_test)
+    pred = model.predict(X_test).astype(np.int32)
     proba = model.predict_proba(X_test)
     logger.info(f'\nPrediction:\n{pred}')
 
@@ -249,12 +265,28 @@ def main(args):
     # upper lower bound on additions needed to flip prediction
     logger.info(f'\nNo. instances added to flip prediction:\n{res_list}')
 
+    # CDF of additions needed to flip prediction
     _, ax = plt.subplots()
-    sns.histplot(res_list, stat='percent', ax=ax)
+    x = np.sort(res_list)
+    y = np.arange(1, len(x) + 1) / len(x) * 100
+    ax.plot(x, y, '-')
     ax.set_ylabel('% test instances')
     ax.set_xlabel(f'No. {args.manipulation}s until prediction change')
-    ax.set_title(f'{args.dataset.capitalize()} ({n_test_correct} correct test) max_depth: {args.max_depth}')
+    ax.set_title(f'{args.dataset.capitalize()} ({n_test_correct} correct test)')
     plt.savefig(out_dir / 'hist.pdf', bbox_inches='tight')
+
+    # scatter plot of additions needed to flip prediction vs. confidence
+    fig, ax = plt.subplots()
+    x = np.array(res_list)
+    y = proba[test_correct_idxs, pred[test_correct_idxs]]
+    xy = np.vstack([x, y])
+    z = gaussian_kde(xy)(xy)
+    im = ax.scatter(x, y, c=z, s=50)
+    ax.set_ylabel('Confidence (%)')
+    ax.set_xlabel(f'No. {args.manipulation}s until prediction change')
+    ax.set_title(f'{args.dataset.capitalize()} ({n_test_correct} correct test)')
+    fig.colorbar(im, ax=ax)
+    plt.savefig(out_dir / 'scatter.pdf', bbox_inches='tight')
 
     # save model results
     result = {}
@@ -284,15 +316,20 @@ if __name__ == '__main__':
     parser.add_argument('--out_dir', type=str, default='output/experiments/attack/')
 
     # Experiment settings
+    parser.add_argument('--model', type=str, default='dt')
     parser.add_argument('--dataset', type=str, default='iris')
     parser.add_argument('--manipulation', type=str, default='addition')
     parser.add_argument('--random_state', type=int, default=1)
-    parser.add_argument('--max_test_correct', type=int, default=100)
+    parser.add_argument('--max_test_correct', type=int, default=1000)
 
     # Model settings
-    parser.add_argument('--max_depth', type=int, default=1)
-    parser.add_argument('--topd', type=int, default=0)
-    parser.add_argument('--k', type=int, default=1000000000)
+    parser.add_argument('--n_estimators', type=int, default=100)  # rf
+    parser.add_argument('--max_depth', type=int, default=5)  # rf/dt
+    parser.add_argument('--topd', type=int, default=0)  # dt
+    parser.add_argument('--k', type=int, default=1000000000)  # dt
+    parser.add_argument('--solver', type=str, default='liblinear')  # lr
+    parser.add_argument('--max_iter', type=int, default=1000)  # lr
+    parser.add_argument('--C', type=float, default=1.0)  # lr
 
     args = parser.parse_args()
     main(args)

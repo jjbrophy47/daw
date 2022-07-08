@@ -55,23 +55,36 @@ def main(args):
                 # plot
                 ax = axs[i][j]
 
-                # CDF
-                if not args.hist:
-                    x = np.sort(res['test_correct_manipulations'])
-                    y = np.arange(1, len(x) + 1) / len(x) * 100
-                    ax.plot(x, y, '-')
-
-                # histogram
+                # scatter
+                if args.plot_type == 'scatter':
+                    x = res['test_correct_manipulations']
+                    y = res['test_correct_confidences'] * 100
+                    ax.scatter(x, y, s=1)
+                    ax.set_ylim(45, 105)
+                    ax.set_ylabel(f'Confidence (%)')
+                    axs[i][0].set_ylabel(f'{dataset}\n'
+                        f'{res["n_train"]:,}/{res["n_test"]:,} train/test\n'
+                        f'Confidence (%)')
                 else:
-                    sns.histplot(res['test_correct_manipulations'], stat='percent', ax=ax)
 
-                ax.set_ylabel(f'% test ({res["n_test_correct"]} instances)')
+                    # CDF
+                    if args.plot_type == 'cdf':
+                        x = np.sort(res['test_correct_manipulations'])
+                        y = np.arange(1, len(x) + 1) / len(x) * 100
+                        ax.plot(x, y, '-')
+
+                    # histogram
+                    else:
+                        sns.histplot(res['test_correct_manipulations'], stat='percent', ax=ax)
+
+                    ax.set_ylabel(f'% test ({res["n_test_correct"]} instances)')
+                    axs[i][0].set_ylabel(f'{dataset}\n'
+                        f'{res["n_train"]:,}/{res["n_test"]:,} train/test\n'
+                        f'% test ({res["n_test_correct"]} instances)')
+
                 ax.set_xlabel(f'# {manipulation}s until prediction change')
                 ax.set_title(f'max. depth: {max_depth}')
                 plt.setp(ax.get_xticklabels(), ha="right", rotation=45)
-                axs[i][0].set_ylabel(f'{dataset}\n'
-                    f'{res["n_train"]:,}/{res["n_test"]:,} train/test\n'
-                    f'% test ({res["n_test_correct"]} instances)')
 
         plt.tight_layout()
         plt.savefig(out_dir / f'{manipulation}.pdf', bbox_inches='tight')
@@ -96,7 +109,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_depth', type=int, nargs='+', default=[1, 2, 3, 4, 5])
 
     # plot settings
-    parser.add_argument('--hist', action='store_true')
+    parser.add_argument('--plot_type', type=str, default='scatter')
     parser.add_argument('--share_xy', action='store_true')
 
     args = parser.parse_args()
