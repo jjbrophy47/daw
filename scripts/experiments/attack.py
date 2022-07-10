@@ -328,7 +328,7 @@ if __name__ == '__main__':
     parser.add_argument('--topd', type=int, default=0)  # dt
     parser.add_argument('--k', type=int, default=1000000000)  # dt
     parser.add_argument('--solver', type=str, default='liblinear')  # lr
-    parser.add_argument('--max_iter', type=int, default=1000)  # lr
+    parser.add_argument('--max_iter', type=int, default=100)  # lr
     parser.add_argument('--C', type=float, default=1.0)  # lr
 
     args = parser.parse_args()

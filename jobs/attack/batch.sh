@@ -14,3 +14,7 @@
 ./jobs/attack/primer.sh 'synthetic'      'addition' 10  1440 short
 ./jobs/attack/primer.sh 'twitter'        'addition' 10  1440 short
 ./jobs/attack/primer.sh 'vaccine'        'addition' 10  1440 short
+
+./jobs/attack/primer.sh 'census'         'addition' 10  5760 long
+./jobs/attack/primer.sh 'credit_card'    'addition' 10  5760 long
+./jobs/attack/primer.sh 'twitter'        'addition' 10  5760 long
