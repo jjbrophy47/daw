@@ -5,12 +5,12 @@
 module load python3/3.7.5
 
 dataset=$1
-model=$2
-method=$3
-k=$4
+manipulation=$2
+model=$3
+max_depth=$4
 
-python3 scripts/experiments/influence.py \
+python3 scripts/experiments/attack.py \
   --dataset $dataset \
+  --manipulation $manipulation \
   --model $model \
-  --method $method \
-  --k $k
+  --max_depth $max_depth

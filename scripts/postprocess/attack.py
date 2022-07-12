@@ -10,6 +10,7 @@ from datetime import datetime
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+from scipy.stats import gaussian_kde
 
 here = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, here + '/../')
@@ -35,36 +36,41 @@ def main(args):
     for manipulation in args.manipulation:
         logger.info(f'\n{manipulation}...')
 
-        nrows, ncols = len(datasets), len(args.max_depth)
+        nrows, ncols = len(datasets), len(args.model)
         sharex = sharey = 'row' if args.share_xy else 'none'
-        _, axs = plt.subplots(nrows, ncols, figsize=(3 * ncols, 2.5 * nrows), sharex=sharex, sharey=sharey)
+        fig, axs = plt.subplots(nrows, ncols, figsize=(3 * ncols, 2.5 * nrows), sharex=sharex, sharey=sharey)
 
+        del_axes = []
         for i, dataset in enumerate(datasets):
             logger.info(f'\n\t{dataset}...')
 
-            for j, max_depth in enumerate(args.max_depth):
-                logger.info(f'\t\tmax. depth: {max_depth}...')
+            for j, model in enumerate(args.model):
+                logger.info(f'\t\tmax. depth: {model}...')
+                ax = axs[i][j]
 
-                fp = in_dir / dataset / manipulation / f'depth_{max_depth}' / 'results.npy'
+                fp = in_dir / dataset / model / manipulation / f'depth_{args.depth}' / 'results.npy'
                 if not fp.exists():
+                    del_axes.append(ax)
                     continue
 
                 # get results
                 res = np.load(fp, allow_pickle=True)[()]
 
-                # plot
-                ax = axs[i][j]
-
                 # scatter
                 if args.plot_type == 'scatter':
                     x = res['test_correct_manipulations']
                     y = res['test_correct_confidences'] * 100
-                    ax.scatter(x, y, s=1)
+                    xy = np.vstack([x, y])
+                    z = gaussian_kde(xy)(xy)
+                    im = ax.scatter(x, y, c=z, s=20)
                     ax.set_ylim(45, 105)
                     ax.set_ylabel(f'Confidence (%)')
                     axs[i][0].set_ylabel(f'{dataset}\n'
                         f'{res["n_train"]:,}/{res["n_test"]:,} train/test\n'
                         f'Confidence (%)')
+                    cbar = fig.colorbar(im, ax=ax)
+                    cbar.set_ticklabels([])
+                    cbar.set_ticks([])
                 else:
 
                     # CDF
@@ -82,10 +88,12 @@ def main(args):
                         f'{res["n_train"]:,}/{res["n_test"]:,} train/test\n'
                         f'% test ({res["n_test_correct"]} instances)')
 
-                ax.set_xlabel(f'# {manipulation}s until prediction change')
-                ax.set_title(f'max. depth: {max_depth}')
+                ax.set_xlabel(f'# {manipulation}s til pred. change')
+                ax.set_title(f'{model.upper()} ({res["auc"]:.3f})')
                 plt.setp(ax.get_xticklabels(), ha="right", rotation=45)
 
+        for ax in del_axes:
+            fig.delaxes(ax=ax)
         plt.tight_layout()
         plt.savefig(out_dir / f'{manipulation}.pdf', bbox_inches='tight')
 
@@ -105,8 +113,9 @@ if __name__ == '__main__':
         'flight_delays', 'gas_sensor', 'higgs', 'no_show', 'olympics',
         'surgical', 'synthetic', 'twitter', 'vaccine'])
     parser.add_argument('--ignore', type=str, nargs='+', default=['higgs', 'synthetic'])
-    parser.add_argument('--manipulation', type=str, nargs='+', default=['deletion', 'addition', 'swap'])
-    parser.add_argument('--max_depth', type=int, nargs='+', default=[1, 2, 3, 4, 5])
+    parser.add_argument('--model', type=int, nargs='+', default=['dt', 'lr', 'rf', 'lgb'])
+    parser.add_argument('--manipulation', type=str, nargs='+', default=['addition'])
+    parser.add_argument('--depth', type=int, default=5)
 
     # plot settings
     parser.add_argument('--plot_type', type=str, default='scatter')
