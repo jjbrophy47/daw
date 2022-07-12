@@ -6,7 +6,7 @@ ncpu=$5
 time=$6
 partition=$7
 
-job_name=A_${dataset}_${model}_${method}_${k}
+job_name=I_${dataset}_${model}_${method}_${k}
 
 sbatch --cpus-per-task=$ncpu \
     --time=$time \

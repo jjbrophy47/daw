@@ -15,9 +15,9 @@ class AKI(Explainer):
     Retrains the model for each training example.
 
     Local-Influence Semantics
-        - Inf.(x_i, x_t) := L(y_t, f_{w/ k x_i}(x_t)) - L(y_t, f(x_t))
-        - Pos. value means adding k x_i increases loss (removing x_i decreases loss, harmful).
-        - Neg. value means adding k x_i decreases loss (removing x_i increases loss, helpful).
+        - Inf.(x_i, x_t) := L(y_t, f(x_t)) - L(y_t, f_{w/ k x_i}(x_t))
+        - Pos. value means adding k x_i decreases loss (removing x_i increases loss, helpful).
+        - Neg. value means adding k x_i increases loss (removing x_i decreases loss, harmful).
 
     Note
         - Model agnostic.
@@ -165,7 +165,7 @@ def _run_iteration(model, X_train, y_train, train_idx, k, X_test, y_test,
 
     start = time.time()
     loss = _get_loss(model=new_model, X=X_test, y=y_test, objective=objective, loss_fn=loss_fn)  # shape=(X_test.shape[0],)
-    influence = loss - original_loss # shape=(X_test.shape[0],)
+    influence = original_loss - loss  # shape=(X_test.shape[0],)
     inf_time = time.time() - start
 
     return influence

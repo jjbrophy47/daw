@@ -1,3 +1,7 @@
+"""
+Removes training examples based influence values computed by `influence.py`,
+and computes change in prediction on each test example.
+"""
 import os
 import sys
 import time
@@ -10,6 +14,7 @@ import matplotlib
 matplotlib.use('Agg')
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.base import clone
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
@@ -22,7 +27,6 @@ sys.path.insert(0, here + '/../')
 from utility import data_util
 from utility import print_util
 from utility import exp_util
-from influence import InfluenceEstimator
 
 def main(args):
 
@@ -35,6 +39,7 @@ def main(args):
         method = f'aki_{args.k}'
 
     # create output directory
+    in_dir = Path(args.in_dir) / args.dataset / args.model / method / f'seed_{args.random_state}'
     out_dir = Path(args.out_dir) / args.dataset / args.model / method / f'seed_{args.random_state}'
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -54,14 +59,7 @@ def main(args):
     logger.info(f'y_test: {y_test.shape}')
     logger.info(f'Objective: {objective} Loss function: {loss_fn}')
 
-    if args.max_train is not None:
-        X_train = X_train[:args.max_train].copy()
-        y_train = y_train[:args.max_train].copy()
-        logger.info(f'\nTrimmed training data:')
-        logger.info(f'X_train: {X_train.shape}')
-        logger.info(f'y_train: {y_train.shape}')
-
-    # train
+    # get model
     if args.model == 'lr':
         if objective == 'regression':
             model = LinearRegression()
@@ -79,40 +77,44 @@ def main(args):
         model = class_fn(n_estimators=args.n_estimators, max_depth=args.max_depth, random_state=args.random_state)
     else:
         raise ValueError(f'Unknown model: {args.model}')
-    model = model.fit(X_train, y_train)
     logger.info(f'\nModel:\n{model}')
 
-    # evaluate
-    logger.info('\nPredictive Performance:')
-    eval_res = exp_util.eval_model(model, X_test, y_test, objective, loss_fn, logger)
+    # get test indices and influence values
+    inf_fp = in_dir / 'results.npy'
+    if not inf_fp.exists():
+        logger.info('Influence values not found, exiting...')
+        return
 
-    # select a subset of test instances to evaluate influence
-    logger.info('\nInfluence:')
-    rng = np.random.default_rng(args.random_state)
+    inf_res = np.load(inf_fp, allow_pickle=True)
+    test_sample = inf_res['test_sample']  # test indices
+    influence = inf_res['influence']  # influence values, shape=(n_train, n_test)
+    assert influence.shape[0] == len(X_train)
+    logger.info(f'\nTest shape: {test_sample.shape}, influence shape: {influence.shape}')
 
-    # sample randomly from test set
-    if objective == 'regression':
-        test_sample = rng.choice(len(X_test), size=args.max_test_sample, replace=False)
-    else:
-        # get correclty predicted test instances
-        test_correct_idxs = np.where(eval_res['pred'] == y_test)[0]
-        logger.info(f'{len(test_correct_idxs)}/{len(y_test)} correctly predicted test instances')
+    # remove training examples from most postively influential to most negatively influential
+    sorted_train_idxs = np.argsort(influence, axis=0)[::-1]
+    remove_fracs = [0.0, 0.005, 0.01, 0.025, 0.05, 0.1, 0.15]
 
-        # sample randomly from correctly predicted test instances
-        n_sample = min(args.max_test_sample, len(test_correct_idxs))
-        test_sample = rng.choice(test_correct_idxs, size=n_sample, replace=False)
-    
-    logger.info(f'computing influence for {len(test_sample)} test instances...')
+    # result container
+    loss = np.zeros((len(test_sample), len(remove_fracs)), dtype=np.float32)
 
-    # compute influence of training examples on test sample
-    params = {}
-    if args.method == 'aki':
-        params = {'k': args.k}
+    for i in range(influence.shape[1]):  # for each test example
+        logger.info(f'\nTest {test_sample[i]}, label: {y_test[test_sample[i]]}')
+        x_test = X_test[test_sample[i]].reshape(1, -1)
 
-    explainer = InfluenceEstimator(method=args.method, params=params, logger=logger)
-    explainer.fit(model=model, X=X_train, y=y_train, objective=objective, loss_fn=loss_fn)
-    influence = explainer.get_local_influence(X_test[test_sample], y_test[test_sample])  # (n_train, n_test_sample)
-    logger.info(f'\nInfluence:\n{influence}, shape: {influence.shape}')
+        for remove_frac in remove_fracs:
+            n_remove = int(remove_frac * influence.shape[0])
+            remove_idxs = sorted_train_idxs[:, i][:n_remove]
+
+            new_X_train = np.delete(X_train, remove_idxs, axis=0)
+            new_y_train = np.delete(y_train, remove_idxs, axis=0)
+            new_model = clone(model).fit(new_X_train, new_y_train)
+
+            if objective == 'regression':
+                new_pred = new_model.predict(x_test)
+            else:
+                new_pred = new_model.predict_proba(x_test)
+            logger.info(f'Remove %: {remove_frac * 100:.1f}: {new_pred}')
 
     # save model results
     result = {}
@@ -121,9 +123,7 @@ def main(args):
     result['n_features'] = X_train.shape[1]
     result['n_train'] = X_train.shape[0]
     result['n_test'] = X_test.shape[0]
-    result['n_test_sample'] = len(test_sample)
-    result['test_sample'] = test_sample
-    result['influence'] = influence
+    result['loss'] = loss  # shape=(n_test, len(remove_fracs))
     result['experiment_time'] = time.time() - begin
     result['max_rss'] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
@@ -137,15 +137,16 @@ if __name__ == '__main__':
 
     # I/O settings
     parser.add_argument('--data_dir', type=str, default='data')
-    parser.add_argument('--out_dir', type=str, default='output/experiments/influence/')
+    parser.add_argument('--in_dir', type=str, default='output/experiments/influence/')
+    parser.add_argument('--out_dir', type=str, default='output/experiments/remove/')
 
     # Experiment settings
     parser.add_argument('--model', type=str, default='dt')
     parser.add_argument('--dataset', type=str, default='iris')
     parser.add_argument('--method', type=str, default='loo')
     parser.add_argument('--random_state', type=int, default=1)
-    parser.add_argument('--max_train', type=int, default=None)
-    parser.add_argument('--max_test_sample', type=int, default=100)
+    parser.add_argument('--remove_fracs', type=float, nargs='+',
+        default=[0.0, 0.005, 0.01, 0.025, 0.05, 0.1, 0.15])
 
     # method settings
     parser.add_argument('--k', type=int, default=1)
