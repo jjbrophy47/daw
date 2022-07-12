@@ -8,7 +8,7 @@ partition=$7
 
 job_name=A_${dataset}_${model}_${method}_${k}
 
-sbatch --cpus_per_task=$ncpu \
+sbatch --cpus-per-task=$ncpu \
     --time=$time \
     --partition=$partition \
     --job-name=$job_name \
