@@ -1,19 +1,20 @@
 dataset=$1
-model=$2
-method=$3
-k=$4
-ncpu=$5
-time=$6
-partition=$7
+manipulation=$2
+mem=$3
+time=$4
+partition=$5
+
+model_list=('lr' 'dt' 'lgb' 'rf')
+max_depth_list=(1 2 3 4 5)
 
 for model in ${model_list[@]}; do
-    job_name=A_${dataset}_${model}_${method}_${k}
+    job_name=A_${dataset}_${manipulation}_${model}
 
-    sbatch --cpus_per_task=${ncpu} \
+    sbatch --mem=${mem}G \
         --time=$time \
         --partition=$partition \
         --job-name=$job_name \
-        --output=jobs/logs/influence/$job_name \
-        --error=jobs/errors/influence/$job_name \
-        jobs/influence/runner.sh $dataset $model $method $k
+        --output=jobs/logs/attack/$job_name \
+        --error=jobs/errors/attack/$job_name \
+        jobs/attack/runner.sh $dataset $manipulation $model 5
 done
