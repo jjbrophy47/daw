@@ -18,7 +18,7 @@ for dataset in ${dataset_list[@]}; do
             fi
             for k in ${k_list[@]}; do
                 for seed in ${seed_list[@]}; do
-                    ./jobs/influence/primer.sh $dataset $model $method $k $ncpu $time $partition
+                    ./jobs/influence/primer.sh $dataset $model $method $k $seed $ncpu $time $partition
                 done
             done
         done

@@ -116,7 +116,7 @@ def main(args):
 
     # save model results
     result = {}
-    result['scipt_args'] = vars(args)
+    result['script_args'] = vars(args)
     result['model_params'] = model.get_params()
     result['n_features'] = X_train.shape[1]
     result['n_train'] = X_train.shape[0]

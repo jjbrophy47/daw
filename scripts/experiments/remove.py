@@ -85,24 +85,23 @@ def main(args):
         logger.info('Influence values not found, exiting...')
         return
 
-    inf_res = np.load(inf_fp, allow_pickle=True)
+    inf_res = np.load(inf_fp, allow_pickle=True)[()]
     test_sample = inf_res['test_sample']  # test indices
     influence = inf_res['influence']  # influence values, shape=(n_train, n_test)
     assert influence.shape[0] == len(X_train)
     logger.info(f'\nTest shape: {test_sample.shape}, influence shape: {influence.shape}')
 
-    # remove training examples from most postively influential to most negatively influential
+    # remove training examples from most POSITIVELY influential to most NEGATIVELY influential
     sorted_train_idxs = np.argsort(influence, axis=0)[::-1]
-    remove_fracs = [0.0, 0.005, 0.01, 0.025, 0.05, 0.1, 0.15]
 
     # result container
-    loss = np.zeros((len(test_sample), len(remove_fracs)), dtype=np.float32)
+    loss = np.zeros((len(test_sample), len(args.remove_fracs)), dtype=np.float32)  # shape=(n_test, n_remove_frac)
 
-    for i in range(influence.shape[1]):  # for each test example
-        logger.info(f'\nTest {test_sample[i]}, label: {y_test[test_sample[i]]}')
-        x_test = X_test[test_sample[i]].reshape(1, -1)
+    for i, test_idx in enumerate(test_sample):  # for each test example
+        logger.info(f'\n#{i}, Test {test_idx}, label: {y_test[test_idx]}')
+        x_test = X_test[[test_idx]]
 
-        for remove_frac in remove_fracs:
+        for j, remove_frac in enumerate(args.remove_fracs):
             n_remove = int(remove_frac * influence.shape[0])
             remove_idxs = sorted_train_idxs[:, i][:n_remove]
 
@@ -114,11 +113,15 @@ def main(args):
                 new_pred = new_model.predict(x_test)
             else:
                 new_pred = new_model.predict_proba(x_test)
-            logger.info(f'Remove %: {remove_frac * 100:.1f}: {new_pred}')
+
+            # save result
+            loss[i, j] = loss_fn(y_test[[test_idx]], new_pred)
+            logger.info(f'Remove %: {remove_frac * 100:.1f}, prediction: {new_pred}, '
+                        f'loss: {loss[i, j]:.5f}')
 
     # save model results
     result = {}
-    result['scipt_args'] = vars(args)
+    result['script_args'] = vars(args)
     result['model_params'] = model.get_params()
     result['n_features'] = X_train.shape[1]
     result['n_train'] = X_train.shape[0]

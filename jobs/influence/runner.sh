@@ -8,9 +8,11 @@ dataset=$1
 model=$2
 method=$3
 k=$4
+seed=$5
 
 python3 scripts/experiments/influence.py \
   --dataset $dataset \
   --model $model \
   --method $method \
-  --k $k
+  --k $k \
+  --random_state $seed
